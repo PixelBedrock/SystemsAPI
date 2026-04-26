@@ -103,16 +103,16 @@ publishing {
             name = "releasesRepo"
             url = uri("https://repo.redstone.llc/releases")
             credentials {
-                username = property("releasesRepoUsername") as String
-                password = property("releasesRepoPassword") as String
+                username = findProperty("releasesRepoUsername") as String
+                password = findProperty("releasesRepoPassword") as String
             }
         }
         maven {
             name = "snapshotsRepo"
             url = uri("https://repo.redstone.llc/snapshots")
             credentials {
-                username = property("releasesRepoUsername") as String
-                password = property("releasesRepoPassword") as String
+                username = findProperty("releasesRepoUsername") as String
+                password = findProperty("releasesRepoPassword") as String
             }
         }
     }
