@@ -3,7 +3,6 @@ package llc.redstone.test
 import com.mojang.brigadier.context.CommandContext
 import llc.redstone.systemsapi.SystemsAPI
 import llc.redstone.systemsdata.Action.*
-import llc.redstone.test.tests.Function.withFunctionSubCommand
 import llc.redstone.test.tests.GroupsTest.withGroupsSubCommand
 import llc.redstone.test.tests.HouseSettingsTest.withHouseSettingsSubCommand
 import llc.redstone.test.tests.RegionsTest.withRegionsSubCommand
@@ -45,7 +44,6 @@ object TestMod : ClientModInitializer {
                         it.source.sendFeedback(MutableText.of(of("Usage: /testmod <feature>")))
                         1
                     }
-                    .withFunctionSubCommand()
                     .withHouseSettingsSubCommand()
                     .withRegionsSubCommand()
                     .withGroupsSubCommand()
