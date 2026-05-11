@@ -86,7 +86,7 @@ object MenuUtils {
                 println("Menu opened during timeout: $nameMatch")
                 MC.currentScreen
             } else {
-                if (ErrorCorrection.onMenuTimeout()) {
+                if (errorCorrection && ErrorCorrection.onMenuTimeout()) {
                     println("Menu corrected on timeout: $nameMatch")
                     MC.currentScreen
                 } else {
