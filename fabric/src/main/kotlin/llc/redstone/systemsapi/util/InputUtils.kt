@@ -155,7 +155,7 @@ object InputUtils {
             }
 
             null, is ChatScreen -> { //If they have Housing Toolbox and the setting is enabled
-                TextUtils.sendMessage(message)
+                MC.networkHandler?.sendChatMessage(message)
             }
 
             else -> throw IllegalStateException("Expected AnvilScreen or ChatScreen, got ${screen.javaClass.name}")

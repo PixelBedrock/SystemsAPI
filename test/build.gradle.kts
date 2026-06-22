@@ -42,7 +42,7 @@ dependencies {
     modRuntimeOnly("me.djtheredstoner:DevAuth-fabric:1.2.2")
 
     implementation(include("net.benwoodworth.knbt:knbt:0.11.9")!!)
-    implementation(include("llc.redstone:SystemsData:1.1.5")!!)
+    implementation(include("llc.redstone:SystemsData:1.2.1")!!)
 
     val commonPath = common.hierarchy.toString()
     api(project(path = commonPath, configuration = "namedElements"))

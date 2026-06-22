@@ -150,7 +150,6 @@ class ActionContainer(
                 //Dont question this :)
                 //Used to catch when there is no actions or conditionals
                 val index = allLines.indexOf(loreLines.getOrNull(index + indexOffset))
-                println(allLines.getOrNull(index + 1))
                 colorValue = allLines.getOrNull(index + 1)
                     ?.split(" - ")?.drop(1)?.joinToString(" - ")
                     ?.replaceFirst("&f", "") ?: continue

@@ -2,7 +2,9 @@ package llc.redstone.test
 
 import com.mojang.brigadier.context.CommandContext
 import llc.redstone.systemsapi.SystemsAPI
-import llc.redstone.systemsdata.Action.*
+import llc.redstone.systemsdata.Action.Conditional
+import llc.redstone.systemsdata.Action.SendMessage
+import llc.redstone.systemsdata.Condition
 import llc.redstone.test.tests.GroupsTest.withGroupsSubCommand
 import llc.redstone.test.tests.HouseSettingsTest.withHouseSettingsSubCommand
 import llc.redstone.test.tests.RegionsTest.withRegionsSubCommand
@@ -60,30 +62,15 @@ object TestMod : ClientModInitializer {
                                 ?.setActions(
                                     listOf(
                                         Conditional(
-                                            listOf(),
+                                            listOf(
+                                                Condition.PlayerVariableRequirement()
+                                            ),
                                             false,
                                             listOf(
-                                                SendMessage("Hello World! 1"),
-                                                DisplayTitle(),
-                                                PauseExecution(),
-                                                SendToLobby(),
                                                 SendMessage()
                                             ),
                                             listOf()
-                                        ),
-                                        Conditional(
-                                            listOf(),
-                                            false,
-                                            listOf(
-                                                SendMessage("Hello World! 2"),
-                                                DisplayTitle(),
-                                                PauseExecution(),
-                                                SendToLobby(),
-                                                SendMessage()
-                                            ),
-                                            listOf()
-                                        ),
-                                        SendMessage("Hello again!")
+                                        )
                                     )
                                 )
                         }

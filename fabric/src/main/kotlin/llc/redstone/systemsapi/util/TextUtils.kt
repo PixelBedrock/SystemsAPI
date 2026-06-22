@@ -1,6 +1,5 @@
 package llc.redstone.systemsapi.util
 
-import llc.redstone.systemsapi.SystemsAPI.MC
 import net.minecraft.text.Text
 import net.minecraft.text.TextColor
 import net.minecraft.util.Formatting
@@ -9,8 +8,10 @@ import net.minecraft.util.Formatting
 object TextUtils {
     fun convertTextToString(text: Text?, colors: Boolean = true): String? {
         if (text == null) return null
-        return text.siblings.joinToString("") {
-            var part = it.string
+        val parts = mutableListOf(text)
+        parts.addAll(text.siblings)
+        return parts.joinToString("") { it ->
+            var part = it.string.replace("§", "&")
             val style = it.style
             if (style.color != null && colors) {
                 val color: TextColor = style.color!!
@@ -20,12 +21,12 @@ object TextUtils {
                     }
                 }
             }
-            part
+            if (!colors) {
+                part.replace(Regex("(?i)&[0-9A-FK-OR]"), "")
+            } else {
+                part
+            }
         }
-    }
-
-    fun sendMessage(message: String) {
-        MC.networkHandler?.sendChatMessage(message)
     }
 
 }

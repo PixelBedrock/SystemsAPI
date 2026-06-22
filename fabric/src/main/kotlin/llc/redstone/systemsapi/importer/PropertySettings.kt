@@ -203,6 +203,17 @@ object PropertySettings {
         if (property.returnType.isSubtypeOf(Keyed::class.starProjectedType.withNullability(true))) {
             val keyed = value as Keyed
 
+            if (currentValue == keyed.key) {
+                finishImport()
+                return
+            }
+
+            println("Current value: $currentValue, new value: ${keyed.key}")
+            if (keyed is KeyedLabeled && currentValue == keyed.label) {
+                finishImport()
+                return
+            }
+
             if (keyed is KeyedCycle) {
                 InputUtils.setKeyedCycle(slot, keyed.key)
                 return
