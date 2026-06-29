@@ -20,6 +20,7 @@ import kotlin.reflect.KProperty1
 import kotlin.reflect.full.findAnnotations
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.jvm.isAccessible
 
 //The title of the actions gui, either Actions: <name> or Edit Actions
 class ActionContainer(
@@ -172,9 +173,12 @@ class ActionContainer(
             args[param] = returnValue
         }
 
+
         return if (args.size != constructor.parameters.size) {
             actionClass.constructors.firstOrNull { it.parameters.size == constructor.parameters.size }?.callBy(args)
+                ?: constructor.callBy(args)
         } else {
+            constructor.isAccessible = true
             constructor.callBy(args)
         }
     }
@@ -195,12 +199,8 @@ class ActionContainer(
 
                 if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() != null) break
 
-                for (slotIndex in actionSlots) {
-                    val slot = MenuUtils.getSlot(slotIndex)
-                    MenuUtils.interactionClick(slot.id, 1)
-                    MenuUtils.onOpen(title)
-                }
-                scaledDelay()
+                MenuUtils.packetClick(10, 1)
+                MenuUtils.onCurrentScreenUpdate()
             }
         }
 

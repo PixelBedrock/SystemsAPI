@@ -194,7 +194,7 @@ object MenuUtils {
 
     fun packetClick(slot: Int, button: Int = 0) {
         ErrorCorrection.lastMenuSlotClick = BasicClick(slot, button)
-        val gui = currentMenu()
+        val gui = MC.currentScreen as? HandledScreen<*> ?: return
 
         val pkt = ClickSlotC2SPacket(
             gui.screenHandler.syncId,
@@ -211,7 +211,7 @@ object MenuUtils {
 
     fun interactionClick(slot: Int, button: Int = 0) {
         ErrorCorrection.lastMenuSlotClick = BasicClick(slot, button)
-        val gui = currentMenu()
+        val gui = MC.currentScreen as? HandledScreen<*> ?: return
 
         MC.interactionManager?.clickSlot(
             gui.screenHandler.syncId,

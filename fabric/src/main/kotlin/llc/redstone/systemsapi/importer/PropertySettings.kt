@@ -31,6 +31,7 @@ object PropertySettings {
         val currentValueColor = slot.stack.loreLines(true).getOrNull(index + 1) ?: ""
         val currentValue = currentValueColor.replace(Regex("&[0-9a-fk-or]"), "")
 
+
         val startTime = System.currentTimeMillis()
         val prevTime = importTimes.getOrDefault(property.returnType.classifier as KClass<*>, 400L)
 
@@ -53,15 +54,15 @@ object PropertySettings {
 
             String::class -> {
                 if (property.hasAnnotation<Pagination>()) {
-                    if (currentValue == value) return
+                    if (currentValue == value.toString()) return
                     MenuUtils.packetClick(slotIndex)
                     MenuUtils.onOpen("Select Option")
                     MenuUtils.clickItems(value.toString(), paginated = true)
                     finishImport()
                     return
                 }
-
-                if (currentValueColor == value) return
+                if (currentValueColor == value.toString()) return
+                if (currentValue == value.toString()) return
                 MenuUtils.packetClick(slotIndex)
                 InputUtils.textInput(value.toString())
             }
@@ -208,7 +209,6 @@ object PropertySettings {
                 return
             }
 
-            println("Current value: $currentValue, new value: ${keyed.key}")
             if (keyed is KeyedLabeled && currentValue == keyed.label) {
                 finishImport()
                 return

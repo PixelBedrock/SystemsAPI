@@ -8,8 +8,11 @@ import net.minecraft.util.Formatting
 object TextUtils {
     fun convertTextToString(text: Text?, colors: Boolean = true): String? {
         if (text == null) return null
-        val parts = mutableListOf(text)
-        parts.addAll(text.siblings)
+        val parts = if (text.siblings.isEmpty()) {
+            mutableListOf(text)
+        } else {
+            mutableListOf(*text.siblings.toTypedArray())
+        }
         return parts.joinToString("") { it ->
             var part = it.string.replace("§", "&")
             val style = it.style

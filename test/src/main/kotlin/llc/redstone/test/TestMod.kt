@@ -2,9 +2,8 @@ package llc.redstone.test
 
 import com.mojang.brigadier.context.CommandContext
 import llc.redstone.systemsapi.SystemsAPI
-import llc.redstone.systemsdata.Action.Conditional
-import llc.redstone.systemsdata.Action.SendMessage
-import llc.redstone.systemsdata.Condition
+import llc.redstone.systemsdata.Action
+import llc.redstone.systemsdata.StatValue
 import llc.redstone.test.tests.GroupsTest.withGroupsSubCommand
 import llc.redstone.test.tests.HouseSettingsTest.withHouseSettingsSubCommand
 import llc.redstone.test.tests.RegionsTest.withRegionsSubCommand
@@ -57,22 +56,18 @@ object TestMod : ClientModInitializer {
                         SystemsAPI.launch {
                             val importer = SystemsAPI.getHousingImporter()
 
-                            importer.getFunction("test")
+                            println(importer.getFunction("test")
                                 ?.getActionContainer()
                                 ?.setActions(
                                     listOf(
-                                        Conditional(
-                                            listOf(
-                                                Condition.PlayerVariableRequirement()
-                                            ),
-                                            false,
-                                            listOf(
-                                                SendMessage()
-                                            ),
-                                            listOf()
-                                        )
+                                        Action.PlayerVariable(
+                                            variable = "Test",
+                                            amount = StatValue.Lng(10)
+                                        ),
+                                        Action.PlayerVariable(),
+                                        Action.SendMessage("Hello from SystemsAPI")
                                     )
-                                )
+                                ))
                         }
                         1
                     }
