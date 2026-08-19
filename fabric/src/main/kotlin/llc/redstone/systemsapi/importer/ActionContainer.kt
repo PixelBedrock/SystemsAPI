@@ -230,12 +230,8 @@ class ActionContainer(
         TODO("Not yet implemented")
     }
 
-    /**
-     * @param fresh true when the container was just cleared, so every action will be created showing
-     * its constructor defaults.
-     */
-    suspend fun addActions(actions: List<Action>, fresh: Boolean = false) =
-        addActions(actions, fresh, plan = null)
+    suspend fun addActions(actions: List<Action>) =
+        addActions(actions, fresh = false, plan = null)
 
     /** @param plan a pre-built cost prediction, when the caller already made one. */
     internal suspend fun addActions(actions: List<Action>, fresh: Boolean, plan: PlanCost?) {

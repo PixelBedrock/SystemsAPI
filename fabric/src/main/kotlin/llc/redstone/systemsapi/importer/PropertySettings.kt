@@ -102,7 +102,7 @@ object PropertySettings {
                     if (actions.size != value.size) error("List contains non-action entries")
                     MenuUtils.packetClick(slotIndex)
                     // Created fresh, so they start at their constructor defaults.
-                    genericContainer.addActions(actions, fresh = true)
+                    genericContainer.addActions(actions, fresh = true, plan = null)
                     MenuUtils.onOpen("Edit Actions")
                     MenuUtils.clickItems(MenuItems.BACK)
                     MenuUtils.onOpen("Action Settings")
