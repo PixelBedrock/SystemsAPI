@@ -13,28 +13,24 @@ import llc.redstone.systemsapi.importer.ConditionContainer
  */
 interface House {
     /**
-     * Returns whether an import operation is currently running for this house.
+     * Returns whether an import or export operation is currently running for this house.
      *
-     * @return true if an import is in progress, false otherwise
+     * Tracked automatically for the lifetime of the operation, including nested containers.
+     *
+     * @return true if an operation is in progress, false otherwise
      */
     fun isImporting(): Boolean
 
     /**
-     * Sets the importing state for this house.
+     * Returns detailed progress for the current (or just-finished) operation, or null if nothing is
+     * running and nothing finished recently.
      *
-     * @param importing true to mark an import as running, false to mark it stopped
+     * Recomputed on every call, so polling once per frame is fine and is the intended usage for a
+     * progress bar. See [ImportProgress] for the equivalent push-based API.
+     *
+     * @return a [HouseProgress] snapshot, or null
      */
-    fun setImporting(importing: Boolean)
-
-    /**
-     * > **WARNING:** Not ready for use!
-     *
-     * Returns the remaining time (in seconds) for the current import operation, or null
-     * if no import is active or if the remaining time is not available.
-     *
-     * @return remaining import time in seconds, or null
-     */
-    fun getTimeRemaining(): Float?
+    fun getProgress(): HouseProgress?
 
     /**
      * Cancels the current import operation if one is running.

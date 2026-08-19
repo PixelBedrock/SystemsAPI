@@ -1,5 +1,13 @@
 package llc.redstone.systemsapi.importer
 
+import llc.redstone.systemsapi.api.ProgressPhase
+import llc.redstone.systemsapi.progress.CostModel
+import llc.redstone.systemsapi.progress.ExportPlanner
+import llc.redstone.systemsapi.progress.ImportPlanner
+import llc.redstone.systemsapi.progress.OpRecorder
+import llc.redstone.systemsapi.progress.PlanCost
+import llc.redstone.systemsapi.progress.ProgressTracker
+import llc.redstone.systemsapi.progress.PropertyReflection
 import llc.redstone.systemsapi.util.ItemStackUtils.getLoreLineMatchesOrNull
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
 import llc.redstone.systemsapi.util.MenuUtils
@@ -7,12 +15,10 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
 import llc.redstone.systemsapi.util.TextUtils
-import llc.redstone.systemsdata.Action
 import llc.redstone.systemsdata.Condition
 import llc.redstone.systemsdata.DisplayName
 import llc.redstone.systemsdata.VariableHolder
 import net.minecraft.item.Items
-import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.findAnnotations
@@ -44,76 +50,78 @@ object ConditionContainer {
         20 to 34,
     )
 
-    fun estimateImportTime(conditions: List<Condition>): Long {
-        var timeRemaining = 0L
-        for (action in conditions) {
-            val conditionClass = action::class
-            val constructor = conditionClass.primaryConstructor ?: continue
-            val properties = constructor.parameters.mapNotNull { param ->
-                val prop = conditionClass.memberProperties.find { it.name == param.name } as? KProperty1<Action, *>
-                prop?.let { it to param }
-            }
-            for ((_, param) in properties) {
-                val classifier = param.type.classifier as? KClass<*> ?: continue
-                val returnValue = PropertySettings.importTimes.getOrDefault(classifier, 400L)
-                timeRemaining += returnValue
-            }
+    //List of conditions to add to the container
+    suspend fun addConditions(actions: List<Condition>) = addConditions(actions, plan = null)
+
+    internal suspend fun addConditions(actions: List<Condition>, plan: PlanCost?) {
+        if (actions.isEmpty()) return
+
+        val conditionsPlan = plan ?: ImportPlanner.planConditions(actions)
+        ProgressTracker.runRootIfIdle(ProgressPhase.IMPORTING, conditionsPlan, "Import conditions") {
+            addPlannedConditions(actions, conditionsPlan)
         }
-        return timeRemaining
     }
 
-    //List of conditions to add to the container
-    suspend fun addConditions(actions: List<Condition>) {
-        for (condition in actions) {
-            //Wait for the "Edit Conditions" to open
-            //We do this every iteration to make sure we are right back at the Conditions page
-            MenuUtils.onOpen("Edit Conditions")
+    private suspend fun addPlannedConditions(actions: List<Condition>, conditionsPlan: PlanCost) {
+        ProgressTracker.beginScope(conditionsPlan)
+        try {
+            for ((index, condition) in actions.withIndex()) {
+                val conditionPlan = conditionsPlan.children.getOrNull(index) ?: PlanCost.EMPTY
+                ProgressTracker.beginScope(conditionPlan)
+                try {
+                    //Wait for the "Edit Conditions" to open
+                    //We do this every iteration to make sure we are right back at the Conditions page
+                    MenuUtils.onOpen("Edit Conditions")
 
-            //Add a condition
-            MenuUtils.clickItems(MenuItems.ADD_CONDITION)
-            MenuUtils.onOpen("Add Condition")
+                    //Add a condition
+                    MenuUtils.clickItems(MenuItems.ADD_CONDITION)
+                    MenuUtils.onOpen("Add Condition")
 
-            //Get the condition parameters/properties
-            val parameters = condition::class.primaryConstructor!!.parameters.toMutableList()
-            val conditionProperties = condition.javaClass.kotlin.memberProperties
+                    //Get the condition parameters/properties, including the injected `inverted` and
+                    //`holder` that are not constructor parameters
+                    val properties = PropertyReflection.propertiesOf(condition)
 
-            val properties = mutableListOf<KProperty1<Condition, *>>()
-            for (parm in parameters) {
-                properties.add(conditionProperties.find { it.name == parm.name } ?: continue)
+                    //Get the Display Name of the condition and add it
+                    val displayName = (condition::class.annotations.find { it is DisplayName } as DisplayName).value
+                    MenuUtils.clickItems(displayName, paginated = true)
+
+                    //Iterate through parameters
+                    for ((propertyIndex, property) in properties.withIndex()) {
+                        //Get the property and its values
+                        val value = property.get(condition)
+
+                        val propertyPlan = conditionPlan.children.getOrNull(propertyIndex) ?: PlanCost.EMPTY
+                        ProgressTracker.beginScope(propertyPlan)
+                        val opsBefore = OpRecorder.opCount()
+                        try {
+                            //Make sure we are in the right gui before continuing
+                            MenuUtils.onOpen("Settings")
+
+                            //Place in the gui to click
+                            val slotIndex = slots[propertyIndex]!!
+                            val slot = MenuUtils.getSlot(slotIndex)
+
+                            PropertySettings.import(property, slot, value)
+                        } finally {
+                            CostModel.recordWork(
+                                "${condition::class.simpleName}#${property.name}",
+                                OpRecorder.opCount() - opsBefore > 1,
+                            )
+                            ProgressTracker.endScope()
+                        }
+                    }
+                    //Make sure we are in the condition settings menu before we go back to actions to add another one
+                    if (properties.isNotEmpty()) {
+                        MenuUtils.onOpen("Settings")
+                        MenuUtils.clickItems(MenuItems.BACK)
+                    }
+                    MenuUtils.onOpen("Edit Conditions")
+                } finally {
+                    ProgressTracker.endScope()
+                }
             }
-
-            //Get the Display Name of the condition and add it
-            val displayName = (condition::class.annotations.find { it is DisplayName } as DisplayName).value
-            MenuUtils.clickItems(displayName, paginated = true)
-
-            //Inverted
-            properties.add(0, conditionProperties.find { it.name == "inverted" } ?: continue)
-
-            //For require variable, because the holder isn't found in the parameters
-            if (condition is Condition.VariableRequirement) {
-                properties.add(1, conditionProperties.find { it.name == "holder" } ?: continue)
-            }
-
-            //Iterate through parameters
-            for ((index, property) in properties.withIndex()) {
-                //Get the property and its values
-                val value = property.get(condition)
-
-                //Make sure we are in the right gui before continuing
-                MenuUtils.onOpen("Settings")
-
-                //Place in the gui to click
-                val slotIndex = slots[index]!!
-                val slot = MenuUtils.getSlot(slotIndex)
-
-                PropertySettings.import(property, slot, value)
-            }
-            //Make sure we are in the condition settings menu before we go back to actions to add another one
-            if (properties.isNotEmpty()) {
-                MenuUtils.onOpen("Settings")
-                MenuUtils.clickItems(MenuItems.BACK)
-            }
-            MenuUtils.onOpen("Edit Conditions")
+        } finally {
+            ProgressTracker.endScope()
         }
     }
 
@@ -123,6 +131,12 @@ object ConditionContainer {
         MenuUtils.onOpen("Edit Conditions")
 
         if (MenuUtils.findSlots(MenuItems.NO_CONDITIONS).firstOrNull() != null) return conditions
+
+        ExportPlanner.discoverPage(
+            slots.values.map { MenuUtils.getSlot(it) },
+            ExportPlanner.PAGE_ROUNDTRIPS,
+            learnActionCost = false,
+        )
 
         for (slotIndex in slots.values) {
             val slot = MenuUtils.getSlot(slotIndex)
@@ -212,6 +226,8 @@ object ConditionContainer {
             MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
             MenuUtils.onOpen("Edit Conditions", checkIfOpen = false)
             conditions.addAll(exportConditions())
+        } else {
+            ExportPlanner.finishDiscovery()
         }
 
         return conditions

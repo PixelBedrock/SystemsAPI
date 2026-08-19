@@ -1,5 +1,6 @@
 package llc.redstone.systemsapi.importer
 
+import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.api.Group
 import llc.redstone.systemsapi.util.CommandUtils
 import llc.redstone.systemsapi.util.InputUtils
@@ -222,7 +223,7 @@ class GroupImporter(override var name: String) : Group {
             val value = key.parseFromMenu(current)
             set[key] = value
         } catch (e: Exception) {
-            println("Failed to parse ${key.displayName}: $current")
+            LOGGER.warn("Failed to parse {}: {}", key.displayName, current, e)
         }
     }
 

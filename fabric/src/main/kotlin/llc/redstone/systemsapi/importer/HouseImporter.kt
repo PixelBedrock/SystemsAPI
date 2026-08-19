@@ -2,50 +2,25 @@ package llc.redstone.systemsapi.importer
 
 import kotlinx.coroutines.cancelChildren
 import llc.redstone.systemsapi.SystemsAPI
-import llc.redstone.systemsapi.SystemsAPI.DYNAMIC_FPS
-import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.api.*
 import llc.redstone.systemsapi.api.Function
 import llc.redstone.systemsapi.coroutine.MCCoroutineImpl
+import llc.redstone.systemsapi.progress.ProgressTracker
 import llc.redstone.systemsapi.util.CommandUtils.getTabCompletions
 import llc.redstone.systemsapi.util.MenuUtils
 
 internal object HouseImporter : House {
-    private var importing = false
-    private var timeRemaining: Long? = null
 
-    override fun isImporting(): Boolean {
-        return importing
-    }
+    override fun isImporting(): Boolean = ProgressTracker.isActive()
 
-    override fun setImporting(importing: Boolean) {
-        if (importing == this.importing) return
-        if (importing) {
-            LOGGER.info("Disabling Dynamic FPS for import...")
-            DYNAMIC_FPS?.disable()
-        } else {
-            LOGGER.info("Re-enabling Dynamic FPS after import...")
-            DYNAMIC_FPS?.enable()
-        }
-        this.importing = importing
-    }
-
-    override fun getTimeRemaining(): Float? {
-//        if (!importing) return null
-        return timeRemaining?.div(1000L)?.toFloat() // Convert to seconds
-    }
+    override fun getProgress(): HouseProgress? = ProgressTracker.read()
 
     override fun cancelImport() {
-        importing = false
-        timeRemaining = null
-
+        // Callable from any thread (a chat command, another mod's HUD), but the tracker's state is
+        // main-thread-only, so hop before touching it.
+        MC.execute { ProgressTracker.requestCancel() }
         MCCoroutineImpl.getCoroutineSession(SystemsAPI).scope.coroutineContext.cancelChildren()
-    }
-
-
-    fun setTimeRemaining(timeRemaining: Long?) {
-        this.timeRemaining = timeRemaining
     }
 
     override suspend fun getCommand(name: String): Command? {

@@ -2,7 +2,9 @@ package llc.redstone.test
 
 import com.mojang.brigadier.context.CommandContext
 import llc.redstone.systemsapi.SystemsAPI
+import llc.redstone.systemsapi.api.ImportProgress
 import llc.redstone.systemsdata.Action
+import llc.redstone.systemsdata.Condition
 import llc.redstone.systemsdata.StatValue
 import llc.redstone.test.tests.GroupsTest.withGroupsSubCommand
 import llc.redstone.test.tests.HouseSettingsTest.withHouseSettingsSubCommand
@@ -38,6 +40,23 @@ object TestMod : ClientModInitializer {
     override fun onInitializeClient() {
         LOGGER.info("Loaded v$VERSION for Minecraft $MINECRAFT.")
 
+        ProgressHud.register()
+
+        // Logs every meaningful change, so a run can be checked for monotonic fraction afterwards.
+        ImportProgress.addListener { progress ->
+            LOGGER.info(
+                "[progress] {} {} {}% remaining={} steps={}/{} depth={} label={}",
+                progress.phase,
+                progress.outcome,
+                (progress.fraction * 100f).toInt(),
+                progress.remainingSeconds,
+                progress.completedSteps,
+                progress.totalSteps,
+                progress.depth,
+                progress.currentLabel,
+            )
+        }
+
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, registryAccess ->
             dispatcher.register(
                 literal("testmod")
@@ -71,6 +90,49 @@ object TestMod : ClientModInitializer {
                         }
                         1
                     }
+                    // The deepest shape Housing allows: Conditional or Random Action cannot be
+                    // placed inside a nested action list, so this is as deep as an import ever goes.
+                    .then(literal("nested").executes {
+                        SystemsAPI.launch {
+                            SystemsAPI.getHousingImporter().getFunction("test")
+                                ?.getActionContainer()
+                                ?.setActions(
+                                    listOf(
+                                        Action.Conditional(
+                                            conditions = listOf(Condition.RequiredGroup("Default")),
+                                            ifActions = listOf(
+                                                Action.SendMessage("matched"),
+                                                Action.PlayerVariable(
+                                                    variable = "Nested",
+                                                    amount = StatValue.Lng(1)
+                                                ),
+                                            ),
+                                            elseActions = listOf(
+                                                Action.SendMessage("did not match"),
+                                            ),
+                                        ),
+                                        Action.SendMessage("after"),
+                                    )
+                                )
+                        }
+                        1
+                    })
+                    // Reads the same function back, exercising the export side of progress.
+                    .then(literal("export").executes { context ->
+                        SystemsAPI.launch {
+                            val actions = SystemsAPI.getHousingImporter().getFunction("test")
+                                ?.getActionContainer()
+                                ?.getActions()
+                            context.sendFeedback("Exported", actions?.size ?: 0)
+                            LOGGER.info("Exported actions: {}", actions)
+                        }
+                        1
+                    })
+                    // Cancels from the command thread, i.e. not the thread the tracker runs on.
+                    .then(literal("cancel").executes {
+                        SystemsAPI.getHousingImporter().cancelImport()
+                        1
+                    })
             )
         }
     }

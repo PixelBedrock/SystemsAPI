@@ -4,6 +4,8 @@ import com.mojang.brigadier.suggestion.Suggestions
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import llc.redstone.systemsapi.SystemsAPI.MC
+import llc.redstone.systemsapi.progress.OpKind
+import llc.redstone.systemsapi.progress.OpRecorder
 import net.minecraft.client.MinecraftClient
 import net.minecraft.network.packet.c2s.play.RequestCommandCompletionsC2SPacket
 
@@ -16,23 +18,24 @@ object CommandUtils {
     }
 
     internal var pending: CompletableDeferred<List<String>>? = null
-    suspend fun getTabCompletions(baseCommand: String): List<String> {
-        val partialCommand = buildString {
-            append(if (baseCommand.startsWith('/')) baseCommand else "/$baseCommand")
-            if (!endsWith(' ')) append(' ')
-        }
+    suspend fun getTabCompletions(baseCommand: String): List<String> =
+        OpRecorder.span(OpKind.TAB_COMPLETE) {
+            val partialCommand = buildString {
+                append(if (baseCommand.startsWith('/')) baseCommand else "/$baseCommand")
+                if (!endsWith(' ')) append(' ')
+            }
 
-        val deferred = CompletableDeferred<List<String>>()
-        pending?.cancel()
-        pending = deferred
+            val deferred = CompletableDeferred<List<String>>()
+            pending?.cancel()
+            pending = deferred
 
-        try {
-            MC.networkHandler?.sendPacket(RequestCommandCompletionsC2SPacket(1, partialCommand))
-            return withTimeout(1_000) { deferred.await() }
-        } finally {
-            if (pending === deferred) pending = null
+            try {
+                MC.networkHandler?.sendPacket(RequestCommandCompletionsC2SPacket(1, partialCommand))
+                withTimeout(1_000) { deferred.await() }
+            } finally {
+                if (pending === deferred) pending = null
+            }
         }
-    }
 
     internal fun handleSuggestions(suggestions: Suggestions) {
         pending?.let { current ->

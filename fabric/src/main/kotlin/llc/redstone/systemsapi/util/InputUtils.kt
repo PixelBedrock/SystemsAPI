@@ -7,6 +7,9 @@ import kotlinx.coroutines.withTimeout
 import llc.redstone.systemsapi.SystemsAPI.CONFIG
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
+import llc.redstone.systemsapi.progress.CostModel
+import llc.redstone.systemsapi.progress.OpKind
+import llc.redstone.systemsapi.progress.OpRecorder
 import llc.redstone.systemsapi.util.ItemStackUtils.getLoreLineMatches
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
 import llc.redstone.systemsapi.util.TextUtils.convertTextToString
@@ -26,13 +29,22 @@ object InputUtils {
         val currentLine = stack.getLoreLineMatches(false) { str -> str.contains("➠") }
         return currentLine.substringAfter("➠ ")
     }
-    suspend fun setKeyedCycle(slot: Slot, value: String) {
-        repeat(slot.stack.loreLines(false).size - 3) {
-            val currentValue = getKeyedCycle(slot)
-            if (currentValue != value) {
-                MenuUtils.packetClick(slot.id)
-                MenuUtils.onCurrentScreenUpdate()
-            } else return
+    /**
+     * @param cycleKey identifies which cycle this is, so the clicks needed to reach a given value
+     * can be learned. Cycling's cost is entirely determined by how far around the cycle the target
+     * sits, so an average is a poor estimate.
+     */
+    suspend fun setKeyedCycle(slot: Slot, value: String, cycleKey: String = slot.stack.name.string) {
+        val entryCount = slot.stack.loreLines(false).size - 3
+        var steps = 0
+        repeat(entryCount) {
+            if (getKeyedCycle(slot) == value) {
+                CostModel.recordCycleSteps(cycleKey, value, steps)
+                return
+            }
+            MenuUtils.packetClick(slot.id)
+            MenuUtils.onCurrentScreenUpdate()
+            steps++
         }
         throw IllegalStateException("Could not find the correct selection for Keyed Cycle")
     }
@@ -142,7 +154,7 @@ object InputUtils {
     }
 
     // For anvil and chat inputs
-    suspend fun textInput(message: String) {
+    suspend fun textInput(message: String) = OpRecorder.span(OpKind.TEXT_INPUT) {
         val message = message.ifEmpty { "&r" }
         ErrorCorrection.lastTextInput = message
         when (val screen = MenuUtils.onOpen(null, AnvilScreen::class, ChatScreen::class, null)) {
@@ -171,17 +183,18 @@ object InputUtils {
     suspend fun getItemFromMenu(
         displayName: String?, compareStack: ItemStack?,
         click: suspend () -> Unit
-    ): ItemStack {
+    ): ItemStack = OpRecorder.span(OpKind.ITEM_RECEIVE) { span ->
         val deferred = CompletableDeferred<ItemStack>()
         pendingStack?.cancel()
         pendingStack = deferred
         pendingItemDisplayName = displayName
         pendingItemCompareStack = compareStack
 
-        return try {
+        try {
             click()
             withTimeout(CONFIG.menuItemTimeout) { deferred.await() }
         } catch(_: Exception) {
+            span.timedOut = true
             error("Failed to get item from menu after timeout")
         } finally {
             if (pendingStack === deferred) pendingStack = null
@@ -216,12 +229,12 @@ object InputUtils {
 
 
     internal var pendingString: CompletableDeferred<String>? = null
-    suspend fun getPreviousInput(click: suspend () -> Unit): String {
+    suspend fun getPreviousInput(click: suspend () -> Unit): String = OpRecorder.span(OpKind.PREV_INPUT) {
         val deferred = CompletableDeferred<String>()
         pendingString?.cancel()
         pendingString = deferred
 
-        return try {
+        try {
             click()
             withTimeout(CONFIG.previousInputTimeout) { deferred.await() }
         } finally {

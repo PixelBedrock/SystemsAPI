@@ -21,6 +21,9 @@ object PredicateUtils {
 
             nameOk && itemOk && extraOk
         }
+
+        /** Stable identifier for this selector, used to learn how many page turns it sits behind. */
+        val cacheKey: String? get() = name?.cacheKey
     }
 
     sealed interface NameMatch {
@@ -33,6 +36,14 @@ object PredicateUtils {
             is NameWithin -> this.values.contains(actual)
             is NameContains -> actual.contains(this.value)
         }
+
+        /** Stable identifier for this matcher, used to learn how many page turns it sits behind. */
+        val cacheKey: String
+            get() = when (this) {
+                is NameExact -> this.value
+                is NameWithin -> this.values.joinToString("/")
+                is NameContains -> this.value
+            }
     }
 
     sealed interface ItemMatch {

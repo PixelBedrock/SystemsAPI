@@ -6,9 +6,12 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import llc.redstone.systemsapi.SystemsAPI.CONFIG
+import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
-import llc.redstone.systemsapi.importer.HouseImporter.setImporting
+import llc.redstone.systemsapi.progress.CostModel
+import llc.redstone.systemsapi.progress.OpKind
+import llc.redstone.systemsapi.progress.OpRecorder
 import llc.redstone.systemsapi.util.ErrorCorrection.BasicClick
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
@@ -50,7 +53,7 @@ object MenuUtils {
         vararg clazz: KClass<out Screen>? = arrayOf(GenericContainerScreen::class),
         checkIfOpen: Boolean = false,
         errorCorrection: Boolean = true
-    ): Screen? {
+    ): Screen? = OpRecorder.span(OpKind.MENU_ROUNDTRIP) { span ->
         suspend fun reset() {
             pendingScreen = null
             pendingNameMatch = null
@@ -64,38 +67,39 @@ object MenuUtils {
         pendingClazz = clazz
         pendingNameMatch = nameMatch
 
-        if (checkIfOpen) {
-            MC.currentScreen?.let { screen ->
-                if (pendingClazz.any { it?.isInstance(screen) == true }) {
-                    val title = screen.title?.string ?: "null"
-                    if (pendingNameMatch?.matches(title) != false) {
-                        reset()
-                        return screen
-                    }
+        val alreadyOpen = if (checkIfOpen) {
+            MC.currentScreen?.takeIf { screen ->
+                pendingClazz.any { it?.isInstance(screen) == true } &&
+                    pendingNameMatch?.matches(screen.title?.string ?: "null") != false
+            }
+        } else null
+
+        if (alreadyOpen != null) {
+            // No packet round-trip paid for, only the item-load wait and settle delay.
+            span.kind = OpKind.MENU_ASSERT
+            reset()
+            alreadyOpen
+        } else {
+            try {
+                withTimeout(CONFIG.menuTimeout) {
+                    deferred.await()
                 }
-            }
-        }
-
-
-        return try {
-            withTimeout(CONFIG.menuTimeout) {
-                deferred.await()
-            }
-        } catch (_: Exception) {
-            if (checkScreen(MC.currentScreen)) {
-                println("Menu opened during timeout: $nameMatch")
-                MC.currentScreen
-            } else {
-                if (errorCorrection && ErrorCorrection.onMenuTimeout()) {
-                    println("Menu corrected on timeout: $nameMatch")
+            } catch (_: Exception) {
+                span.timedOut = true
+                if (checkScreen(MC.currentScreen)) {
+                    LOGGER.debug("Menu opened during timeout: {}", nameMatch)
                     MC.currentScreen
                 } else {
-                    setImporting(false)
-                    error("Timed out waiting for menu: $nameMatch")
+                    if (errorCorrection && ErrorCorrection.onMenuTimeout()) {
+                        LOGGER.debug("Menu corrected on timeout: {}", nameMatch)
+                        MC.currentScreen
+                    } else {
+                        error("Timed out waiting for menu: $nameMatch")
+                    }
                 }
+            } finally {
+                reset()
             }
-        } finally {
-            reset()
         }
     }
 
@@ -228,34 +232,52 @@ object MenuUtils {
 
     // FINDING ITEMS IN MENUS
 
-    suspend fun findSlots(predicate: (ItemStack) -> Boolean, paginated: Boolean = false): List<Slot> {
+    /**
+     * @param cacheKey stable name of what is being looked for. Combined with [paginated], the number
+     * of page turns needed to reach it is learned, so a later import knows that (say) "Send Message"
+     * sits three pages into the "Add Action" menu instead of assuming an average.
+     */
+    suspend fun findSlots(
+        predicate: (ItemStack) -> Boolean,
+        paginated: Boolean = false,
+        cacheKey: String? = null
+    ): List<Slot> {
         fun currentSlots() = currentMenu().screenHandler.slots.filter { predicate(it.stack) }
 
+        val learnKey = if (paginated) cacheKey else null
+        val menuTitle = if (learnKey != null) currentMenu().title.string else null
+
         var slots = currentSlots()
+        var turns = 0
         while (slots.isEmpty() && paginated) {
             val nextPageSlot = findSlots(GlobalMenuItems.NEXT_PAGE).firstOrNull() ?: return emptyList()
-            packetClick(nextPageSlot.id)
-            scaledDelay(4.0)
+            // Spanned rather than timed inline so the scaledDelay inside is not counted twice.
+            OpRecorder.span(OpKind.PAGE_TURN) {
+                packetClick(nextPageSlot.id)
+                scaledDelay(4.0)
+            }
+            turns++
             slots = currentSlots()
         }
+        if (learnKey != null && menuTitle != null) CostModel.recordPageTurns(menuTitle, learnKey, turns)
         return slots
     }
 
     suspend fun findSlots(name: String, paginated: Boolean = false, partial: Boolean = false): List<Slot> {
         return findSlots({
             if (!partial) it.name.string == name else it.name.string.contains(name)
-        }, paginated)
+        }, paginated, cacheKey = name)
     }
 
     suspend fun findSlots(name: String, item: Item, paginated: Boolean = false): List<Slot> {
         return findSlots({
             it.name.string == name &&
             it.item == item
-        }, paginated)
+        }, paginated, cacheKey = name)
     }
 
     suspend fun findSlots(selector: ItemSelector, paginated: Boolean = false): List<Slot> {
-        return findSlots(selector.toPredicate(), paginated)
+        return findSlots(selector.toPredicate(), paginated, cacheKey = selector.cacheKey)
     }
 
     fun getSlot(slotIndex: Int): Slot {
@@ -263,8 +285,14 @@ object MenuUtils {
     }
 
     // CLICKING ITEMS IN MENUS
-    suspend fun clickItems(predicate: (ItemStack) -> Boolean, packet: Boolean = true, button: Int = 0, paginated: Boolean = false) {
-        findSlots(predicate, paginated).forEach { slot ->
+    suspend fun clickItems(
+        predicate: (ItemStack) -> Boolean,
+        packet: Boolean = true,
+        button: Int = 0,
+        paginated: Boolean = false,
+        cacheKey: String? = null
+    ) {
+        findSlots(predicate, paginated, cacheKey).forEach { slot ->
             when (packet) {
                 true -> packetClick(slot.id, button)
                 false -> interactionClick(slot.id, button)
@@ -279,7 +307,8 @@ object MenuUtils {
             },
             packet,
             button,
-            paginated
+            paginated,
+            cacheKey = name
         )
     }
 
@@ -291,7 +320,8 @@ object MenuUtils {
             },
             packet,
             button,
-            paginated
+            paginated,
+            cacheKey = name
         )
     }
 
@@ -300,7 +330,8 @@ object MenuUtils {
             selector.toPredicate(),
             packet,
             button,
-            paginated
+            paginated,
+            cacheKey = selector.cacheKey
         )
     }
 
@@ -310,7 +341,7 @@ object MenuUtils {
             item = ItemExact(Items.ARROW)
         )
         val PREVIOUS_PAGE = ItemSelector(
-            name = NameWithin(listOf("Last Page", "Right-click for previous page!")),
+            name = NameWithin(listOf("Last Page", "Left-click for previous page!")),
             item = ItemExact(Items.ARROW)
         )
     }

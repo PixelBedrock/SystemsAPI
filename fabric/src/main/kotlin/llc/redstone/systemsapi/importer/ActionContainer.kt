@@ -1,7 +1,10 @@
 package llc.redstone.systemsapi.importer
 
+import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
+import llc.redstone.systemsapi.api.ProgressPhase
+import llc.redstone.systemsapi.progress.*
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
 import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
@@ -10,7 +13,6 @@ import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
 import llc.redstone.systemsapi.util.TextUtils
 import llc.redstone.systemsdata.Action
 import llc.redstone.systemsdata.ActionDefinition
-import llc.redstone.systemsdata.Condition
 import llc.redstone.systemsdata.VariableHolder
 import net.minecraft.item.Items
 import net.minecraft.screen.slot.Slot
@@ -50,66 +52,66 @@ class ActionContainer(
             19 to 33,
             20 to 34,
         )
-
-        var updateTime = true
     }
 
-    fun estimateImportTime(actions: List<Action>): Long {
-        var timeRemaining = 0L
-        for (action in actions) {
-            val actionClass = action::class
-            val constructor = actionClass.primaryConstructor ?: continue
-            val properties = constructor.parameters.mapNotNull { param ->
-                val prop = actionClass.memberProperties.find { it.name == param.name } as? KProperty1<Action, *>
-                prop?.let { it to param }
-            }
-            for ((prop, param) in properties) {
-                val classifier = param.type.classifier as? KClass<*> ?: continue
-                if (classifier == List::class) {
-                    val value = prop.get(action) as? List<*> ?: continue
-                    if (value.isEmpty()) continue
-                    if (value.first() is Action) {
-                        timeRemaining += estimateImportTime(value as List<Action>)
-                    } else if (value.first() is Condition) {
-                        timeRemaining += ConditionContainer.estimateImportTime(value as List<Condition>)
-                    }
-                    continue
-                }
-                val returnValue = PropertySettings.importTimes.getOrDefault(classifier, 400L)
-                timeRemaining += returnValue
-            }
-            timeRemaining += actionNavigationTime
+    suspend fun getActions(): List<Action> = ProgressTracker.runRootIfIdle(
+        ProgressPhase.EXPORTING,
+        planned = null,
+        label = "Read $title",
+        indeterminate = true,
+    ) {
+        MenuUtils.onOpen(title)
+
+        if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() != null) {
+            ExportPlanner.finishDiscovery()
+            return@runRootIfIdle emptyList()
         }
-        return timeRemaining
+
+        // Pass one: walk forward to the last page, pricing each from its lore alone. By the time any
+        // expensive reading starts, the whole container's cost is known, instead of growing every
+        // time a nested container happens to be opened.
+        var pages = 0
+        while (true) {
+            pages++
+            ExportPlanner.discoverPage(
+                currentPageSlots(),
+                if (pages == 1) ExportPlanner.FIRST_PAGE_ROUNDTRIPS else ExportPlanner.LATER_PAGE_ROUNDTRIPS,
+            )
+            if (MenuUtils.findSlots(MenuUtils.GlobalMenuItems.NEXT_PAGE).firstOrNull() == null) break
+            MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
+            MenuUtils.onOpen(" $title", checkIfOpen = false)
+        }
+        ExportPlanner.finishDiscovery()
+
+        // Pass two: read back to the front with the previous-page arrow. The walk out already left
+        // us on the last page, so this is the first time it's exercised outside of that item's own
+        // definition -- if it lands anywhere but the page just left, results will come back wrong or
+        // duplicated, so watch the exported count on a container with more than 21 actions.
+        val byPage = ArrayList<List<Action>>(pages)
+        for (page in pages downTo 1) {
+            byPage.add(readCurrentPage())
+            if (page > 1) {
+                MenuUtils.clickItems(MenuUtils.GlobalMenuItems.PREVIOUS_PAGE)
+                MenuUtils.onOpen(title, checkIfOpen = false)
+                LOGGER.debug("Export: walked back to page {} of {}, now on '{}'", page - 1, pages, MC.currentScreen?.title?.string)
+            }
+        }
+
+        byPage.asReversed().flatten()
     }
 
-    suspend fun getActions(): List<Action> {
-        HouseImporter.setImporting(true)
-        try {
-            val actions = mutableListOf<Action>()
-            MenuUtils.onOpen(title)
+    private fun currentPageSlots(): List<Slot> = slots.values.map { MenuUtils.getSlot(it) }
 
-            if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() != null) return actions
+    private suspend fun readCurrentPage(): List<Action> {
+        val actions = mutableListOf<Action>()
+        for (slotIndex in slots.values) {
+            val slot = MenuUtils.getSlot(slotIndex)
+            if (!slot.hasStack()) break
 
-            for (slotIndex in slots.values) {
-                val slot = MenuUtils.getSlot(slotIndex)
-                if (!slot.hasStack()) break
-
-                parseAction(slot)?.let { actions.add(it) }
-            }
-
-            // Handle pagination
-            MenuUtils.onOpen(title)
-            if (MenuUtils.findSlots(MenuUtils.GlobalMenuItems.NEXT_PAGE).firstOrNull() != null) {
-                MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
-                MenuUtils.onOpen(" $title", checkIfOpen = false)
-                actions.addAll(getActions())
-            }
-
-            return actions
-        } finally {
-            HouseImporter.setImporting(false)
+            parseAction(slot)?.let { actions.add(it) }
         }
+        MenuUtils.onOpen(title)
+        return actions
     }
 
     private suspend fun parseAction(slot: Slot): Action? {
@@ -184,122 +186,136 @@ class ActionContainer(
     }
 
     suspend fun setActions(newActions: List<Action>) {
-        HouseImporter.setImporting(true)
-        //Clear existing actions
-        MenuUtils.onOpen(title)
-        if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() == null) {
-            //There are existing actions, remove them
-            while (true) {
-                val actionSlots = mutableListOf<Int>()
-                for (slotIndex in slots.values) {
-                    val slot = MenuUtils.getSlot(slotIndex)
-                    if (!slot.hasStack()) break //No more actions
-                    actionSlots.add(slotIndex)
+        val plan = ImportPlanner.planActions(newActions, title, fresh = true)
+
+        ProgressTracker.runRoot(ProgressPhase.PREPARING, plan, "Import $title") {
+            //Clear existing actions
+            MenuUtils.onOpen(title)
+            if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() == null) {
+                ProgressTracker.setPhase(ProgressPhase.CLEARING)
+                var counted = false
+                //There are existing actions, remove them
+                while (true) {
+                    val actionSlots = mutableListOf<Int>()
+                    for (slotIndex in slots.values) {
+                        val slot = MenuUtils.getSlot(slotIndex)
+                        if (!slot.hasStack()) break //No more actions
+                        actionSlots.add(slotIndex)
+                    }
+
+                    if (!counted) {
+                        // One round-trip per action. Only the current page is visible, so this is a
+                        // lower bound.
+                        counted = true
+                        ProgressTracker.reviseTotal(
+                            actionSlots.size * CostModel.estimateMs(OpKind.MENU_ROUNDTRIP),
+                            actionSlots.size,
+                        )
+                    }
+
+                    if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() != null) break
+
+                    MenuUtils.packetClick(10, 1)
+                    MenuUtils.onCurrentScreenUpdate()
                 }
-
-                if (MenuUtils.findSlots(MenuItems.NO_ACTIONS).firstOrNull() != null) break
-
-                MenuUtils.packetClick(10, 1)
-                MenuUtils.onCurrentScreenUpdate()
             }
-        }
 
-        //Add new actions
-        addActions(newActions)
+            //Add new actions
+            ProgressTracker.setPhase(ProgressPhase.IMPORTING)
+            addActions(newActions, fresh = true, plan = plan)
+        }
     }
 
     suspend fun updateActions(newActions: List<Action>) {
         TODO("Not yet implemented")
     }
 
-    var actionNavigationTime = 400L
+    /**
+     * @param fresh true when the container was just cleared, so every action will be created showing
+     * its constructor defaults.
+     */
+    suspend fun addActions(actions: List<Action>, fresh: Boolean = false) =
+        addActions(actions, fresh, plan = null)
 
-
-    //List of actions to add to the container
-    suspend fun addActions(actions: List<Action>) {
+    /** @param plan a pre-built cost prediction, when the caller already made one. */
+    internal suspend fun addActions(actions: List<Action>, fresh: Boolean, plan: PlanCost?) {
         if (actions.isEmpty()) return
 
-        HouseImporter.setImporting(true)
-
-        var time = estimateImportTime(actions)
-        var startTime = (HouseImporter.getTimeRemaining()?.times(1000) ?: time).toLong()
-        if (updateTime) {
-            HouseImporter.setTimeRemaining(time)
+        val actionsPlan = plan ?: ImportPlanner.planActions(actions, title, fresh)
+        // Owns the run when called on its own, joins the enclosing one when nested.
+        ProgressTracker.runRootIfIdle(ProgressPhase.IMPORTING, actionsPlan, "Import $title") {
+            addPlannedActions(actions, actionsPlan)
         }
-        println("Estimated import time: ${time}ms ${HouseImporter.getTimeRemaining()}s")
+    }
 
-        for ((index, action) in actions.withIndex()) {
-            val estimatedTime = estimateImportTime(actions.subList(index, actions.size))
-            if (updateTime) {
-                HouseImporter.setTimeRemaining(estimatedTime)
-            } else {
-                HouseImporter.setTimeRemaining(startTime - (time - estimatedTime))
+    private suspend fun addPlannedActions(actions: List<Action>, actionsPlan: PlanCost) {
+        ProgressTracker.beginScope(actionsPlan)
+        try {
+            for ((index, action) in actions.withIndex()) {
+                val actionPlan = actionsPlan.children.getOrNull(index) ?: PlanCost.EMPTY
+                ProgressTracker.beginScope(actionPlan)
+                try {
+                    //Wait for the "Actions: <name>" or "Edit Actions" to open
+                    //We do this every iteration to make sure we are right back at the Actions page
+                    MenuUtils.onOpen(title)
+
+                    if (action is Action.CustomAction) {
+                        action.function(action.parameters)
+                        continue
+                    }
+
+                    //Add an action
+                    MenuUtils.clickItems(MenuItems.ADD_ACTION)
+                    MenuUtils.onOpen("Add Action")
+
+                    //Get the action parameters/properties, in the order the importer walks them
+                    val properties = PropertyReflection.propertiesOf(action)
+
+                    //Get the Display Name of the action and add it
+                    val displayName =
+                        (action::class.annotations.find { it is ActionDefinition } as ActionDefinition).displayName
+                    MenuUtils.clickItems(displayName, paginated = true)
+
+                    //Iterate through parameters
+                    for ((propertyIndex, property) in properties.withIndex()) {
+                        //Get the property and its values
+                        val value = property.get(action)
+
+                        val propertyPlan = actionPlan.children.getOrNull(propertyIndex) ?: PlanCost.EMPTY
+                        ProgressTracker.beginScope(propertyPlan)
+                        val opsBefore = OpRecorder.opCount()
+                        try {
+                            //Make sure we are in the right gui before continuing
+                            MenuUtils.onOpen("Action Settings")
+
+                            //Place in the gui to click
+                            val slotIndex = slots[propertyIndex]!!
+                            val slot = MenuUtils.getSlot(slotIndex)
+
+                            PropertySettings.import(property, slot, value)
+                        } finally {
+                            // One operation means only the settings-screen wait happened, so the
+                            // property short-circuited.
+                            CostModel.recordWork(
+                                "${action::class.simpleName}#${property.name}",
+                                OpRecorder.opCount() - opsBefore > 1,
+                            )
+                            ProgressTracker.endScope()
+                        }
+                    }
+                    //Make sure we are in the action settings menu before we go back to actions to add another one
+                    if (properties.isNotEmpty()) {
+                        MenuUtils.onOpen("Action Settings")
+                        MenuUtils.clickItems(MenuItems.BACK)
+                    }
+                    MenuUtils.onOpen(title)
+                } finally {
+                    ProgressTracker.endScope()
+                }
             }
-            println("Updated estimated time remaining: ${estimatedTime}ms ${HouseImporter.getTimeRemaining()}s")
-
-            val startA = System.currentTimeMillis()
-            //Wait for the "Actions: <name>" or "Edit Actions" to open
-            //We do this every iteration to make sure we are right back at the Actions page
-            MenuUtils.onOpen(title)
-
-            if (action is Action.CustomAction) {
-                action.function(action.parameters)
-                continue
-            }
-
-            //Add an action
-            MenuUtils.clickItems(MenuItems.ADD_ACTION)
-            MenuUtils.onOpen("Add Action")
-
-            //Get the action parameters/properties
-            val parameters = action::class.primaryConstructor!!.parameters.toMutableList()
-            val actionProperties = action.javaClass.kotlin.memberProperties
-
-            val properties = mutableListOf<KProperty1<Action, *>>()
-            for (parm in parameters) {
-                properties.add(actionProperties.find { it.name == parm.name } ?: continue)
-            }
-
-            //Get the Display Name of the action and add it
-            val displayName =
-                (action::class.annotations.find { it is ActionDefinition } as ActionDefinition).displayName
-            MenuUtils.clickItems(displayName, paginated = true)
-
-            //For change variable, because the holder isn't found in the parameters
-            if (action is Action.ChangeVariable) {
-                properties.add(0, actionProperties.find { it.name == "holder" } ?: continue)
-            }
-
-            val endA = System.currentTimeMillis()
-
-            //Iterate through parameters
-            for ((index, property) in properties.withIndex()) {
-                //Get the property and its values
-                val value = property.get(action)
-
-                //Make sure we are in the right gui before continuing
-                MenuUtils.onOpen("Action Settings")
-
-                //Place in the gui to click
-                val slotIndex = slots[index]!!
-                val slot = MenuUtils.getSlot(slotIndex)
-
-                PropertySettings.import(property, slot, value)
-            }
-            //Make sure we are in the action settings menu before we go back to actions to add another one
-            var startB = System.currentTimeMillis()
-            if (properties.isNotEmpty()) {
-                MenuUtils.onOpen("Action Settings")
-                MenuUtils.clickItems(MenuItems.BACK)
-            }
-            MenuUtils.onOpen(title)
-
-            var endB = System.currentTimeMillis()
-
-            actionNavigationTime = ((endA - startA) + (endB - startB))
+        } finally {
+            ProgressTracker.endScope()
         }
-
-        HouseImporter.setImporting(false)
     }
 
     suspend fun copyToHousingClipboard() {

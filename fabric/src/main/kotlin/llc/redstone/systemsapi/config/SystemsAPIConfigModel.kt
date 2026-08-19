@@ -22,4 +22,10 @@ class SystemsAPIConfigModel {
     var menuItemTimeout: Long = 1000L
     @JvmField
     var previousInputTimeout: Long = 1000L
+
+    @JvmField
+    @SectionHeader("progress")
+    var learnTimings: Boolean = true
+    @JvmField
+    var persistCalibration: Boolean = true
 }

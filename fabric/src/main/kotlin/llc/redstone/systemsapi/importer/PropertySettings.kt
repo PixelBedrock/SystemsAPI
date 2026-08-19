@@ -2,6 +2,7 @@ package llc.redstone.systemsapi.importer
 
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.importer.ActionContainer.MenuItems
+import llc.redstone.systemsapi.progress.ExportPlanner
 import llc.redstone.systemsapi.util.InputUtils
 import llc.redstone.systemsapi.util.ItemStackUtils.getCurrentValue
 import llc.redstone.systemsapi.util.ItemStackUtils.getLoreLine
@@ -22,24 +23,19 @@ import kotlin.reflect.full.*
 import kotlin.reflect.jvm.javaField
 
 object PropertySettings {
-    val importTimes = mutableMapOf<KClass<*>, Long>()
-    val exportTimes = mutableMapOf<KClass<*>, Long>()
 
+    /**
+     * Applies [value] to the property's slot in the currently open settings menu.
+     *
+     * The branches below are mirrored by [llc.redstone.systemsapi.progress.ImportPlanner], which
+     * predicts what each one costs. **Adding a branch here means adding one there**, or the new
+     * property becomes invisible to the time estimate.
+     */
     suspend fun import(property: KProperty1<out PropertyHolder, *>, slot: Slot, value: Any?) {
         val slotIndex = slot.id
         val index = slot.stack.loreLines(false).indexOfFirst { it == "Current Value:" }
         val currentValueColor = slot.stack.loreLines(true).getOrNull(index + 1) ?: ""
         val currentValue = currentValueColor.replace(Regex("&[0-9a-fk-or]"), "")
-
-
-        val startTime = System.currentTimeMillis()
-        val prevTime = importTimes.getOrDefault(property.returnType.classifier as KClass<*>, 400L)
-
-        fun finishImport() {
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            importTimes[property.returnType.classifier as KClass<*>] = (prevTime + duration) / 2
-        }
 
         if (value == null || !slot.hasStack()) {
             return
@@ -58,7 +54,6 @@ object PropertySettings {
                     MenuUtils.packetClick(slotIndex)
                     MenuUtils.onOpen("Select Option")
                     MenuUtils.clickItems(value.toString(), paginated = true)
-                    finishImport()
                     return
                 }
                 if (currentValueColor == value.toString()) return
@@ -106,9 +101,8 @@ object PropertySettings {
                     val actions = value.filterIsInstance<Action>()
                     if (actions.size != value.size) error("List contains non-action entries")
                     MenuUtils.packetClick(slotIndex)
-                    ActionContainer.updateTime = false
-                    genericContainer.addActions(actions)
-                    ActionContainer.updateTime = true
+                    // Created fresh, so they start at their constructor defaults.
+                    genericContainer.addActions(actions, fresh = true)
                     MenuUtils.onOpen("Edit Actions")
                     MenuUtils.clickItems(MenuItems.BACK)
                     MenuUtils.onOpen("Action Settings")
@@ -135,7 +129,6 @@ object PropertySettings {
                 if (invSlot::class.annotations.find { it is CustomKey } != null) {
                     InputUtils.textInput(value.toString())
                 }
-                finishImport()
                 return
             }
 
@@ -148,7 +141,6 @@ object PropertySettings {
                 MenuUtils.onOpen("Select Option")
                 MenuUtils.packetClick(48)
                 InputUtils.textInput(value.key)
-                finishImport()
                 return
             }
 
@@ -167,7 +159,6 @@ object PropertySettings {
                         InputUtils.textInput(location.toString())
                     }
                 }
-                finishImport()
                 return
             }
 
@@ -196,7 +187,6 @@ object PropertySettings {
 
                     MenuUtils.clickItems(operation.key, paginated = true)
                 }
-                finishImport()
                 return
             }
         }
@@ -205,17 +195,15 @@ object PropertySettings {
             val keyed = value as Keyed
 
             if (currentValue == keyed.key) {
-                finishImport()
                 return
             }
 
             if (keyed is KeyedLabeled && currentValue == keyed.label) {
-                finishImport()
                 return
             }
 
             if (keyed is KeyedCycle) {
-                InputUtils.setKeyedCycle(slot, keyed.key)
+                InputUtils.setKeyedCycle(slot, keyed.key, cycleKey = keyed::class.simpleName ?: "cycle")
                 return
             }
 
@@ -233,18 +221,13 @@ object PropertySettings {
                 }
             }
 
-            finishImport()
             return
         }
-        finishImport()
     }
 
     private val genericContainer = ActionContainer("Edit Actions")
 
     suspend fun export(title: String, prop: KProperty1<out PropertyHolder, *>, actionSlot: Slot, propertySlotIndex: Int, value: String, colorValue: String): Any? {
-
-        val startTime = System.currentTimeMillis()
-        val prevTime = exportTimes.getOrDefault(prop.returnType.classifier as KClass<*>, 50L)
         var colorValue = colorValue
         var value = value
 
@@ -308,13 +291,25 @@ object PropertySettings {
                     MenuUtils.packetClick(actionSlot.id)
                     MenuUtils.onOpen("Action Settings")
                     MenuUtils.packetClick(propertySlotIndex)
-                    returnValue = genericContainer.getActions()
+                    // The parent's lore already priced these by name; claim that pre-charge so this
+                    // container's real cost replaces it instead of stacking on top.
+                    ExportPlanner.beginNestedDescent()
+                    returnValue = try {
+                        genericContainer.getActions()
+                    } finally {
+                        ExportPlanner.endNestedDescent()
+                    }
                 } else if (listType == Condition::class.java) {
                     if (value == "None") return emptyList<Condition>()
                     MenuUtils.packetClick(actionSlot.id)
                     MenuUtils.onOpen("Action Settings")
                     MenuUtils.packetClick(propertySlotIndex)
-                    returnValue = ConditionContainer.exportConditions()
+                    ExportPlanner.beginNestedDescent()
+                    returnValue = try {
+                        ConditionContainer.exportConditions()
+                    } finally {
+                        ExportPlanner.endNestedDescent()
+                    }
                 }
                 MenuUtils.clickItems(MenuItems.BACK)
                 MenuUtils.onOpen("Action Settings")
@@ -394,14 +389,7 @@ object PropertySettings {
             else -> null
         }
 
-        fun finishExport() {
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            exportTimes[prop.returnType.classifier as KClass<*>] = (prevTime + duration) / 2
-        }
-
         if (argValue != null) {
-            finishExport()
             return argValue
         }
 
@@ -414,11 +402,9 @@ object PropertySettings {
             val getByKeyMethod = companion::class.members.find { it.name == "fromKey" }
                 ?: error("No getByKey method for keyed enum: ${prop.returnType}")
 
-            finishExport()
             return getByKeyMethod.call(companion, value)
         }
 
-        finishExport()
         return null
     }
 }

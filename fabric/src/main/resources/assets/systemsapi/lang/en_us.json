@@ -15,5 +15,11 @@
   "text.config.systemsapi.option.menuItemTimeout": "Menu Item Timeout",
   "text.config.systemsapi.option.menuItemTimeout.tooltip": "The time in milliseconds that the importer will wait to receive an item before throwing an error.",
   "text.config.systemsapi.option.previousInputTimeout": "Previous Input Timeout",
-  "text.config.systemsapi.option.previousInputTimeout.tooltip": "The time in milliseconds that the importer will wait to receive a previous input throwing an error."
+  "text.config.systemsapi.option.previousInputTimeout.tooltip": "The time in milliseconds that the importer will wait to receive a previous input throwing an error.",
+
+  "text.config.systemsapi.section.progress": "Progress & Estimates",
+  "text.config.systemsapi.option.learnTimings": "Learn Timings",
+  "text.config.systemsapi.option.learnTimings.tooltip": "Measure how long menu operations actually take and use that to estimate remaining time.\nDisabling this falls back to fixed built-in estimates.",
+  "text.config.systemsapi.option.persistCalibration": "Remember Timings",
+  "text.config.systemsapi.option.persistCalibration.tooltip": "Save learned timings to systemsapi-calibration.json so the first import after launching is accurate."
 }

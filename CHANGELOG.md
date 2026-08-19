@@ -1,1 +1,1 @@
-- Lots of bug fixes
+Rewritten progress and time estimation

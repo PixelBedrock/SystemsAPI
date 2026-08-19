@@ -9,6 +9,10 @@ import llc.redstone.systemsapi.coroutine.MCCoroutineImpl.mcCoroutineConfiguratio
 import llc.redstone.systemsapi.coroutine.MCCoroutineImpl.minecraftDispatcher
 import llc.redstone.systemsapi.coroutine.MCCoroutineImpl.scope
 import llc.redstone.systemsapi.hook.DynamicFPSHook
+import llc.redstone.systemsapi.progress.CalibrationStore
+import llc.redstone.systemsapi.progress.CostModel
+import llc.redstone.systemsapi.progress.OpKind
+import llc.redstone.systemsapi.progress.OpRecorder
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.MinecraftClient
@@ -36,6 +40,14 @@ object SystemsAPI : ClientModInitializer {
             DYNAMIC_FPS = DynamicFPSHook()
         }
 
+        // Seeds the timing model from the last session.
+        if (CONFIG.persistCalibration) {
+            CalibrationStore.load()?.let {
+                CostModel.load(it)
+                LOGGER.info("Loaded import timing calibration.")
+            }
+        }
+
         LOGGER.info("Loaded v$VERSION for Minecraft $MINECRAFT.")
     }
 
@@ -43,7 +55,13 @@ object SystemsAPI : ClientModInitializer {
         return llc.redstone.systemsapi.importer.HouseImporter
     }
 
-    suspend fun scaledDelay(mul: Double = 1.0) = delay((CONFIG.baseClickDelay * mul).toLong())
+    suspend fun scaledDelay(mul: Double = 1.0) {
+        val ms = (CONFIG.baseClickDelay * mul).toLong()
+        delay(ms)
+        // Suppressed when nested, since the delays inside onOpen and the paginated find loop are
+        // already part of those operations' cost.
+        OpRecorder.flat(OpKind.FIXED_DELAY, ms)
+    }
 
     fun launch(
         context: CoroutineContext = minecraftDispatcher,
