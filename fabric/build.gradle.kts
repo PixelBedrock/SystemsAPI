@@ -89,25 +89,22 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
-//publishMods {
-//    file = tasks.remapJar.map { it.archiveFile.get() }
-//    additionalFiles.from(tasks.remapSourcesJar.map { it.archiveFile.get() })
-//    displayName = "${property("mod.name")} ${property("mod.version")} for ${property("mod.mc_title")}"
-//    version = property("mod.version") as String
-//    changelog = rootProject.file("CHANGELOG.md").readText()
-//    type = BETA
-//    modLoaders.add("fabric")
-//
-//    dryRun = providers.environmentVariable("MODRINTH_TOKEN").getOrNull() == null
-//
-//    modrinth {
-//        projectId = property("publish.modrinth") as String
-//        accessToken = providers.environmentVariable("MODRINTH_TOKEN")
-//        minecraftVersions.addAll(property("mod.mc_targets").toString().split(' '))
-//
-//        requires ("fabric-language-kotlin", "owo-lib", "fabric-api")
-//    }
-//}
+publishMods {
+    file.set(tasks.jar.map { it.archiveFile.get() })
+    displayName.set("${property("mod.name")} ${property("mod.version")} for ${property("mod.mc_title")}")
+    version.set(property("mod.version") as String)
+    changelog.set(rootProject.file("CHANGELOG.md").readText())
+    type.set(BETA)
+    modLoaders.add("fabric")
+
+    modrinth {
+        accessToken.set(providers.environmentVariable("MODRINTH_TOKEN"))
+        projectId.set(property("publish.modrinth") as String)
+        minecraftVersions.addAll(property("mod.mc_targets").toString().split(' '))
+
+        requires("fabric-language-kotlin", "owo-lib", "fabric-api")
+    }
+}
 
 publishing {
     publications {
