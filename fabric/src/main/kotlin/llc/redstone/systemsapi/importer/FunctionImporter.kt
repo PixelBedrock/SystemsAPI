@@ -11,8 +11,8 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.Item
-import net.minecraft.item.Items
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.Items
 
 internal class FunctionImporter(override var name: String) : Function {
     private fun isFunctionEditMenuOpen(): Boolean = runCatching { MenuUtils.currentMenu().title.string.contains("Edit: ") }.getOrDefault(false)
@@ -64,7 +64,7 @@ internal class FunctionImporter(override var name: String) : Function {
     override suspend fun getIcon(): Item {
         openFunctionEditMenu()
         val slot = MenuUtils.findSlots(MenuItems.icon).first()
-        return slot.stack.item
+        return slot.item.item
     }
 
     override suspend fun setIcon(newIcon: Item): Function {
@@ -73,7 +73,7 @@ internal class FunctionImporter(override var name: String) : Function {
         MenuUtils.clickItems(MenuItems.icon)
         MenuUtils.onOpen("Select an Item")
 
-        val itemStack = newIcon.defaultStack
+        val itemStack = newIcon.defaultInstance
         itemStack.giveItem(26)
         MenuUtils.clickPlayerSlot(26)
         return this
@@ -83,7 +83,7 @@ internal class FunctionImporter(override var name: String) : Function {
         openFunctionEditMenu()
 
         val ticks = MenuUtils.findSlots(MenuItems.automaticExecution).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.let { if (it == "Disabled") 0 else it.toIntOrNull() }
             ?: throw IllegalStateException("Failed to find automatic execution ticks")
@@ -96,7 +96,7 @@ internal class FunctionImporter(override var name: String) : Function {
         openFunctionEditMenu()
 
         val ticks = MenuUtils.findSlots(MenuItems.automaticExecution).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.let { if (it == "Disabled") 0 else it.toIntOrNull() }
             ?: throw IllegalStateException("Failed to set automatic execution")

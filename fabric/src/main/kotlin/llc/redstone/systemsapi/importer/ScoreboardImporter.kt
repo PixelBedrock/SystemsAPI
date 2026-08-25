@@ -15,7 +15,7 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.Items
+import net.minecraft.world.item.Items
 
 object ScoreboardImporter : Scoreboard {
 
@@ -32,9 +32,9 @@ object ScoreboardImporter : Scoreboard {
         openScoreboardMenu()
 
         val gui = MenuUtils.currentMenu()
-        return gui.screenHandler.slots
-            .filter { it.id <= 44 && it.hasStack() }
-            .mapNotNull { fromItemStack(it.stack, it.id) }
+        return gui.menu.slots
+            .filter { it.index <= 44 && it.hasItem() }
+            .mapNotNull { fromItemStack(it.item, it.index) }
     }
 
     override suspend fun setLines(newLines: List<LineType>): Scoreboard {
@@ -44,12 +44,12 @@ object ScoreboardImporter : Scoreboard {
         // remove old lines
         do {
             val gui = MenuUtils.currentMenu()
-            val elements = gui.screenHandler.slots
-                .filter { it.id <= 44 && it.hasStack() && !it.stack.item.equals(Items.BEDROCK)}
-                .sortedByDescending { it.id }
+            val elements = gui.menu.slots
+                .filter { it.index <= 44 && it.hasItem() && !it.item.item.equals(Items.BEDROCK)}
+                .sortedByDescending { it.index }
             for (element in elements) {
-                LOGGER.info("clicking slot ${element.id}")
-                MenuUtils.packetClick(element.id, 1)
+                LOGGER.info("clicking slot ${element.index}")
+                MenuUtils.packetClick(element.index, 1)
                 scaledDelay(0.5) // TODO: check--is this too fast?
             }
         } while (elements.isNotEmpty())
@@ -66,8 +66,8 @@ object ScoreboardImporter : Scoreboard {
             when (line) {
                 is CustomLine -> {
                     val itemIndex = (44 downTo 0).firstOrNull { index ->
-                        val slot = gui.screenHandler.getSlot(index)
-                        slot.hasStack()
+                        val slot = gui.menu.getSlot(index)
+                        slot.hasItem()
                     } ?: throw IllegalStateException("There are no scoreboard lines when there should be")
 
                     MenuUtils.packetClick(itemIndex)
@@ -80,8 +80,8 @@ object ScoreboardImporter : Scoreboard {
                 }
                 is VariableValue -> {
                     val itemIndex = (44 downTo 0).firstOrNull { index ->
-                        val slot = gui.screenHandler.getSlot(index)
-                        slot.hasStack()
+                        val slot = gui.menu.getSlot(index)
+                        slot.hasItem()
                     } ?: throw IllegalStateException("There are no scoreboard lines when there should be")
 
                     MenuUtils.packetClick(itemIndex)
@@ -110,8 +110,8 @@ object ScoreboardImporter : Scoreboard {
         return this
     }
 
-    suspend fun fromItemStack(stack: net.minecraft.item.ItemStack, slot: Int): LineType? {
-        val name = runCatching { stack.name.string }.getOrNull() ?: return null
+    suspend fun fromItemStack(stack: net.minecraft.world.item.ItemStack, slot: Int): LineType? {
+        val name = runCatching { stack.hoverName.string }.getOrNull() ?: return null
 
         return when (name) {
             "Custom Line" -> {

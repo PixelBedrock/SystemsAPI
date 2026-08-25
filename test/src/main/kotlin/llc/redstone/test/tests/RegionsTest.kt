@@ -7,13 +7,16 @@ import llc.redstone.systemsapi.api.Region
 import llc.redstone.systemsdata.Action
 import llc.redstone.systemsdata.StatOp
 import llc.redstone.systemsdata.StatValue
-import llc.redstone.test.TestMod.MC
 import llc.redstone.test.TestMod.sendFeedback
+//? if <26.1 {
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal
+//?} else {
+/*import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+*///?}
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
-import net.minecraft.text.MutableText
-import net.minecraft.text.PlainTextContent.of
+import net.minecraft.network.chat.MutableComponent
 import java.awt.Color
+import net.minecraft.network.chat.contents.PlainTextContents.create as of
 
 object RegionsTest {
     fun LiteralArgumentBuilder<FabricClientCommandSource>.withRegionsSubCommand(): LiteralArgumentBuilder<FabricClientCommandSource> {
@@ -54,10 +57,10 @@ object RegionsTest {
                 context.sendFeedback("Exit Actions", region.getExitActionContainer().getActions())
             } catch (e: Exception) {
                 e.printStackTrace()
-                MC.player?.sendMessage(
-                    MutableText.of(
+                context.source.sendFeedback(
+                    MutableComponent.create(
                         of("[Test Mod] An error occurred: ${e.message}")
-                    ).withColor(Color.RED.rgb), false
+                    ).withColor(Color.RED.rgb)
                 )
             }
         }

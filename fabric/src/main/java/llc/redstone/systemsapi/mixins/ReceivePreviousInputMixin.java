@@ -2,11 +2,11 @@ package llc.redstone.systemsapi.mixins;
 
 import llc.redstone.systemsapi.util.InputUtils;
 import llc.redstone.systemsapi.util.MenuUtils;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,15 +15,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Arrays;
 import java.util.Objects;
 
-@Mixin(ClientPlayNetworkHandler.class)
+@Mixin(ClientPacketListener.class)
 public class ReceivePreviousInputMixin {
 
     @Inject(
-            method = "onGameMessage",
+            method = "handleSystemChat",
             at = @At("HEAD"),
             cancellable = true
     )
-    private void onGameMessage(GameMessageS2CPacket packet, CallbackInfo ci) {
+    private void onGameMessage(ClientboundSystemChatPacket packet, CallbackInfo ci) {
         if (Arrays.stream(MenuUtils.INSTANCE.getPendingClazz()).anyMatch(Objects::isNull)) {
             MenuUtils.INSTANCE.completeOnClose$systemsapi();
             return;
@@ -31,14 +31,14 @@ public class ReceivePreviousInputMixin {
 
         if (InputUtils.INSTANCE.getPendingString$systemsapi() == null) return;
 
-        Text message = packet.content();
+        Component message = packet.content();
         if (message.getSiblings().isEmpty()) return;
         if (!message.getSiblings().get(0).getString().trim().equals("Please use the chat to provide the value you wish to set.")) return;
 
-        Text previousComponent = message.getSiblings().get(1);
+        Component previousComponent = message.getSiblings().get(1);
         Style previousStyle = previousComponent.getStyle();
         ClickEvent clickEvent = previousStyle.getClickEvent();
-        if (clickEvent != null && clickEvent.getAction() != ClickEvent.Action.SUGGEST_COMMAND) return;
+        if (clickEvent != null && clickEvent.action() != ClickEvent.Action.SUGGEST_COMMAND) return;
         ClickEvent.SuggestCommand suggestCommand = (ClickEvent.SuggestCommand) clickEvent;
         if (suggestCommand == null) return;
 

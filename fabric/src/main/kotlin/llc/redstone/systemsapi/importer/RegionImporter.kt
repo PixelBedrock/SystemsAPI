@@ -1,5 +1,9 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
 import llc.redstone.systemsapi.api.Region
@@ -13,12 +17,12 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen
-import net.minecraft.item.Items
+import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.world.item.Items
 
 internal class RegionImporter(override var name: String) : Region {
     private fun isRegionEditMenuOpen(): Boolean {
-        val container = MC.currentScreen as? GenericContainerScreen ?: return false
+        val container = MC.screen as? ContainerScreen ?: return false
         return container.title.string.contains("Edit $name Region")
     }
 

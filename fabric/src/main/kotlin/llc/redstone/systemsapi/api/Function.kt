@@ -1,7 +1,7 @@
 package llc.redstone.systemsapi.api
 
 import llc.redstone.systemsapi.importer.ActionContainer
-import net.minecraft.item.Item
+import net.minecraft.world.item.Item
 
 /**
  * Represents a function within Housing.

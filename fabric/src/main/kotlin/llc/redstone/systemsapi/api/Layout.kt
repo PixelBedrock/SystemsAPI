@@ -1,6 +1,6 @@
 package llc.redstone.systemsapi.api
 
-import net.minecraft.item.ItemStack
+import net.minecraft.world.item.ItemStack
 
 /**
  * Represents a saved inventory layout within Housing.

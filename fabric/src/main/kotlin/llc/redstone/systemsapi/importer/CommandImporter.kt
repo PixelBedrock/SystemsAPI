@@ -1,10 +1,15 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.api.Command
 import llc.redstone.systemsapi.util.ChatUtils
 import llc.redstone.systemsapi.util.CommandUtils
 import llc.redstone.systemsapi.util.CommandUtils.getTabCompletions
+import llc.redstone.systemsapi.util.Dyes
 import llc.redstone.systemsapi.util.InputUtils
 import llc.redstone.systemsapi.util.ItemStackUtils.getProperty
 import llc.redstone.systemsapi.util.MenuUtils
@@ -12,19 +17,19 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemWithin
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen
-import net.minecraft.item.Items
+import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.world.item.Items
 
 const val MAX_NAME_LENGTH = 30
 
 internal class CommandImporter(override var name: String) : Command {
     private fun isCommandEditMenuOpen(): Boolean {
-        val container = MC.currentScreen as? GenericContainerScreen ?: return false
+        val container = MC.screen as? ContainerScreen ?: return false
         return container.title.string.contains("Edit /${this@CommandImporter.name}") // absence of colon is intentional; hypixel weird
     }
 
     private fun isActionsMenuOpen(): Boolean {
-        val container = MC.currentScreen as? GenericContainerScreen ?: return false
+        val container = MC.screen as? ContainerScreen ?: return false
         return container.title.string.contains("Actions: ")
     }
 
@@ -57,7 +62,7 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val mode = MenuUtils.findSlots(MenuItems.mode).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.let { if (it == "Self") Command.CommandMode.SELF else Command.CommandMode.TARGETED }
             ?: throw IllegalStateException("Failed to get the command mode")
@@ -68,7 +73,7 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val mode = MenuUtils.findSlots(MenuItems.mode).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.let { if (it == "Self") Command.CommandMode.SELF else Command.CommandMode.TARGETED }
             ?: throw IllegalStateException("Failed to set the command mode to ${newCommandMode.name}")
@@ -82,7 +87,7 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val priority = MenuUtils.findSlots(MenuItems.requiredGroupPriority).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.toIntOrNull()
             ?: throw IllegalStateException("Failed to get the required group priority")
@@ -95,7 +100,7 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val priority = MenuUtils.findSlots(MenuItems.requiredGroupPriority).first()
-            .stack
+            .item
             ?.getProperty("Current")
             ?.toIntOrNull()
             ?: throw IllegalStateException("Failed to set the required group priority to $newPriority.")
@@ -110,9 +115,9 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val listed = MenuUtils.findSlots(MenuItems.listed).first()
-            .stack
+            .item
             ?.item
-            ?.let { item -> item == Items.LIME_DYE }
+            ?.let { item -> item == Dyes.LIME }
             ?: throw IllegalStateException("Failed to get the listed value")
 
         return listed
@@ -122,9 +127,9 @@ internal class CommandImporter(override var name: String) : Command {
         openCommandEditMenu()
 
         val listed = MenuUtils.findSlots(MenuItems.listed).first()
-            .stack
+            .item
             ?.item
-            ?.let { item -> item == Items.LIME_DYE }
+            ?.let { item -> item == Dyes.LIME }
             ?: throw IllegalStateException("Failed to set the listed value to $newListed.")
         if (listed == newListed) return this
 
@@ -158,7 +163,7 @@ internal class CommandImporter(override var name: String) : Command {
         )
         val mode = ItemSelector(
             name = NameExact("Toggle Command Mode"),
-            item = ItemWithin(listOf(Items.LIGHT_GRAY_DYE, Items.LIME_DYE))
+            item = ItemWithin(listOf(Dyes.LIGHT_GRAY, Dyes.LIME))
         )
         val requiredGroupPriority = ItemSelector(
             name = NameExact("Required Group Priority"),
@@ -166,7 +171,7 @@ internal class CommandImporter(override var name: String) : Command {
         )
         val listed = ItemSelector(
             name = NameExact("Listed"),
-            item = ItemWithin(listOf(Items.LIGHT_GRAY_DYE, Items.LIME_DYE))
+            item = ItemWithin(listOf(Dyes.LIGHT_GRAY, Dyes.LIME))
         )
     }
 }

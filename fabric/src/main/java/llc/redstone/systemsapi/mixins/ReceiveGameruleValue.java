@@ -1,22 +1,22 @@
 package llc.redstone.systemsapi.mixins;
 
 import llc.redstone.systemsapi.importer.GameruleImporter;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ClientPlayNetworkHandler.class)
+@Mixin(ClientPacketListener.class)
 public class ReceiveGameruleValue {
 
     @Inject(
-            method = "onGameMessage",
+            method = "handleSystemChat",
             at = @At("HEAD"),
             cancellable = true
     )
-    private void onGameMessage(GameMessageS2CPacket packet, CallbackInfo ci) {
+    private void onGameMessage(ClientboundSystemChatPacket packet, CallbackInfo ci) {
         if (GameruleImporter.INSTANCE.getPendingChat$systemsapi() == null) return;
 
         String content = packet.content().getSiblings().get(1).getString();

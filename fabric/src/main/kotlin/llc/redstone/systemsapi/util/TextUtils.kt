@@ -1,12 +1,12 @@
 package llc.redstone.systemsapi.util
 
-import net.minecraft.text.Text
-import net.minecraft.text.TextColor
-import net.minecraft.util.Formatting
+import net.minecraft.ChatFormatting
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.TextColor
 
 
 object TextUtils {
-    fun convertTextToString(text: Text?, colors: Boolean = true): String? {
+    fun convertTextToString(text: Component?, colors: Boolean = true): String? {
         if (text == null) return null
         val parts = if (text.siblings.isEmpty()) {
             mutableListOf(text)
@@ -18,8 +18,12 @@ object TextUtils {
             val style = it.style
             if (style.color != null && colors) {
                 val color: TextColor = style.color!!
-                for (format in Formatting.entries) {
-                    if (color.rgb == format.colorValue) {
+                for (format in ChatFormatting.values()) {
+                    //? if >=26.2 {
+                    /*if (color.value == TextColor.fromLegacyFormat(format)?.value) {
+                    *///?} else {
+                    if (color.value == format.color) {
+                    //?}
                         part = (format.toString() + part).replace("§", "&")
                     }
                 }

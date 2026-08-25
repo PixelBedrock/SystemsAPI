@@ -1,7 +1,10 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    kotlin("jvm") version "2.2.10"
+    kotlin("jvm") version "2.3.0"
+    id("dev.kikugie.loom-back-compat")
     id("com.google.devtools.ksp") version "2.3.4"
-    id("fabric-loom")
     `maven-publish`
     id("me.modmuss50.mod-publish-plugin")
     id("org.jetbrains.dokka") version "2.1.0"
@@ -10,6 +13,14 @@ plugins {
 version = "${property("mod.version")}+${stonecutter.current.version}"
 base.archivesName = property("mod.id") as String
 group = "llc.redstone"
+
+val requiredJava: JavaVersion = when {
+    stonecutter.current.parsed >= "26.1" -> JavaVersion.VERSION_25
+    stonecutter.current.parsed >= "1.20.5" -> JavaVersion.VERSION_21
+    stonecutter.current.parsed >= "1.18" -> JavaVersion.VERSION_17
+    stonecutter.current.parsed >= "1.17" -> JavaVersion.VERSION_16
+    else -> JavaVersion.VERSION_1_8
+}
 
 repositories {
     maven("https://repo.redstone.llc/releases")
@@ -33,12 +44,12 @@ repositories {
 
 dependencies {
     minecraft("com.mojang:minecraft:${stonecutter.current.version}")
-    mappings("net.fabricmc:yarn:${property("deps.yarn")}:v2")
+    loomx.applyMojangMappings()
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
 
     modImplementation("net.fabricmc:fabric-language-kotlin:${property("deps.fabric_language_kotlin")}")
     modImplementation("io.wispforest:owo-lib:${property("deps.owo")}")
-    modCompileOnly("maven.modrinth:dynamic-fps:3.11.4-fabric,${stonecutter.current.version}")
+    modCompileOnly("maven.modrinth:dynamic-fps:${property("deps.dynamic_fps")}")
     ksp("dev.kosmx.kowoconfig:ksp-owo-config:0.2.0")
 
     modImplementation("net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}")
@@ -62,30 +73,41 @@ loom {
 
 java {
     withSourcesJar()
-    val javaVersion: JavaVersion = JavaVersion.VERSION_21
-    targetCompatibility = javaVersion
-    sourceCompatibility = javaVersion
+    targetCompatibility = requiredJava
+    sourceCompatibility = requiredJava
 }
 
-publishMods {
-    file = tasks.remapJar.map { it.archiveFile.get() }
-    additionalFiles.from(tasks.remapSourcesJar.map { it.archiveFile.get() })
-    displayName = "${property("mod.name")} ${property("mod.version")} for ${property("mod.mc_title")}"
-    version = property("mod.version") as String
-    changelog = rootProject.file("CHANGELOG.md").readText()
-    type = BETA
-    modLoaders.add("fabric")
-
-    dryRun = providers.environmentVariable("MODRINTH_TOKEN").getOrNull() == null
-
-    modrinth {
-        projectId = property("publish.modrinth") as String
-        accessToken = providers.environmentVariable("MODRINTH_TOKEN")
-        minecraftVersions.addAll(property("mod.mc_targets").toString().split(' '))
-
-        requires ("fabric-language-kotlin", "owo-lib", "fabric-api")
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(requiredJava.majorVersion))
     }
 }
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(requiredJava.majorVersion))
+    }
+}
+
+//publishMods {
+//    file = tasks.remapJar.map { it.archiveFile.get() }
+//    additionalFiles.from(tasks.remapSourcesJar.map { it.archiveFile.get() })
+//    displayName = "${property("mod.name")} ${property("mod.version")} for ${property("mod.mc_title")}"
+//    version = property("mod.version") as String
+//    changelog = rootProject.file("CHANGELOG.md").readText()
+//    type = BETA
+//    modLoaders.add("fabric")
+//
+//    dryRun = providers.environmentVariable("MODRINTH_TOKEN").getOrNull() == null
+//
+//    modrinth {
+//        projectId = property("publish.modrinth") as String
+//        accessToken = providers.environmentVariable("MODRINTH_TOKEN")
+//        minecraftVersions.addAll(property("mod.mc_targets").toString().split(' '))
+//
+//        requires ("fabric-language-kotlin", "owo-lib", "fabric-api")
+//    }
+//}
 
 publishing {
     publications {
@@ -132,13 +154,5 @@ tasks {
         )
 
         filesMatching("fabric.mod.json") { expand(props) }
-    }
-
-    // Builds the version into a shared folder in `build/libs/${mod version}/`
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(remapJar.map { it.archiveFile }, remapSourcesJar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod.version")}"))
-        dependsOn("build")
     }
 }

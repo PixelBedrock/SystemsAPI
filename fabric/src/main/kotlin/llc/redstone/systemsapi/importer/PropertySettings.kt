@@ -13,8 +13,8 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.NbtHelper
 import llc.redstone.systemsdata.*
 import llc.redstone.systemsdata.enums.Sound
-import net.minecraft.nbt.StringNbtReader
-import net.minecraft.screen.slot.Slot
+import net.minecraft.nbt.TagParser
+import net.minecraft.world.inventory.Slot
 import java.lang.reflect.ParameterizedType
 import kotlin.jvm.optionals.getOrNull
 import kotlin.reflect.KClass
@@ -32,12 +32,12 @@ object PropertySettings {
      * property becomes invisible to the time estimate.
      */
     suspend fun import(property: KProperty1<out PropertyHolder, *>, slot: Slot, value: Any?) {
-        val slotIndex = slot.id
-        val index = slot.stack.loreLines(false).indexOfFirst { it == "Current Value:" }
-        val currentValueColor = slot.stack.loreLines(true).getOrNull(index + 1) ?: ""
+        val slotIndex = slot.index
+        val index = slot.item.loreLines(false).indexOfFirst { it == "Current Value:" }
+        val currentValueColor = slot.item.loreLines(true).getOrNull(index + 1) ?: ""
         val currentValue = currentValueColor.replace(Regex("&[0-9a-fk-or]"), "")
 
-        if (value == null || !slot.hasStack()) {
+        if (value == null || !slot.hasItem()) {
             return
         }
         when (property.returnType.classifier) {
@@ -70,10 +70,10 @@ object PropertySettings {
 
                 if (value.nbt != null) {
                     val nbtString = value.nbt ?: error("[Item action] ItemStack has no NBT data")
-                    val nbt = StringNbtReader.readCompound(nbtString)
+                    val nbt = TagParser.parseCompoundFully(nbtString)
                     val item = NbtHelper.deserializeItemStack(nbt).getOrNull()
                         ?: error("[Item action] Failed to deserialize ItemStack from NBT")
-                    val oldStack = player.inventory.getStack(26)
+                    val oldStack = player.inventory.getItem(26)
                     item.giveItem(26)
                     MenuUtils.clickPlayerSlot(26)
                     oldStack.giveItem(26)
@@ -167,7 +167,7 @@ object PropertySettings {
 
                 val operation = value as StatOp
 
-                val value = slot.stack.getLoreLineMatchesOrNull(false, filter = { str -> str == operation.key })
+                val value = slot.item.getLoreLineMatchesOrNull(false, filter = { str -> str == operation.key })
                 if (value == null) {
                     MenuUtils.packetClick(slotIndex)
                     MenuUtils.onOpen("Select Option")
@@ -175,7 +175,7 @@ object PropertySettings {
                     if (operation.advanced) {
                         val advancedOperationsValue = MenuUtils.findSlots(MenuItems.TOGGLE_ADVANCED_OPERATIONS)
                             .firstOrNull()
-                            ?.stack
+                            ?.item
                             ?.getLoreLine(4, false)
                             ?.equals("Enabled")
                             ?: throw IllegalStateException("Failed to get the status of advanced operations toggle")
@@ -238,9 +238,9 @@ object PropertySettings {
         if (value.endsWith("...")) {
             when (prop.returnType.classifier) {
                 Location::class -> {
-                    MenuUtils.packetClick(actionSlot.id)
+                    MenuUtils.packetClick(actionSlot.index)
                     MenuUtils.onOpen("Action Settings")
-                    MenuUtils.getSlot(propertySlotIndex).stack.getCurrentValue(false)?.let {
+                    MenuUtils.getSlot(propertySlotIndex).item.getCurrentValue(false)?.let {
                         colorValue = it
                     }
                     MenuUtils.clickItems(MenuItems.BACK)
@@ -249,7 +249,7 @@ object PropertySettings {
                 ItemStack::class -> {}
                 else -> {
                     colorValue = InputUtils.getPreviousInput {
-                        MenuUtils.packetClick(actionSlot.id)
+                        MenuUtils.packetClick(actionSlot.index)
                         MenuUtils.onOpen("Action Settings")
                         MenuUtils.packetClick(propertySlotIndex)
                     }.also {
@@ -288,7 +288,7 @@ object PropertySettings {
                 val listType = field.actualTypeArguments[0]
                 if (listType == Action::class.java) {
                     if (value == "None") return emptyList<Action>()
-                    MenuUtils.packetClick(actionSlot.id)
+                    MenuUtils.packetClick(actionSlot.index)
                     MenuUtils.onOpen("Action Settings")
                     MenuUtils.packetClick(propertySlotIndex)
                     // The parent's lore already priced these by name; claim that pre-charge so this
@@ -301,7 +301,7 @@ object PropertySettings {
                     }
                 } else if (listType == Condition::class.java) {
                     if (value == "None") return emptyList<Condition>()
-                    MenuUtils.packetClick(actionSlot.id)
+                    MenuUtils.packetClick(actionSlot.index)
                     MenuUtils.onOpen("Action Settings")
                     MenuUtils.packetClick(propertySlotIndex)
                     ExportPlanner.beginNestedDescent()
@@ -324,10 +324,10 @@ object PropertySettings {
             }
 
             ItemStack::class -> {
-                MenuUtils.packetClick(actionSlot.id)
+                MenuUtils.packetClick(actionSlot.index)
                 MenuUtils.onOpen("Settings")
 
-                val stack = MenuUtils.getSlot(propertySlotIndex).stack
+                val stack = MenuUtils.getSlot(propertySlotIndex).item
 
                 MenuUtils.packetClick(propertySlotIndex)
                 MenuUtils.onOpen("Select an Item")

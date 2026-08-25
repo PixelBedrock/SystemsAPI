@@ -1,8 +1,8 @@
 package llc.redstone.systemsapi.util
 
-import net.minecraft.enchantment.Enchantment
-import net.minecraft.item.Item
-import net.minecraft.item.ItemStack
+import net.minecraft.world.item.enchantment.Enchantment
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
 
 class EnchantmentBuilder {
     internal val enchantments = mutableMapOf<Enchantment, Int>()

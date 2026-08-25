@@ -1,5 +1,9 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
@@ -12,12 +16,12 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen
-import net.minecraft.item.Items
+import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.world.item.Items
 
 class TeamImporter(override var name: String) : Team {
     private fun isTeamMenuOpen(): Boolean {
-        val container = MC.currentScreen as? GenericContainerScreen ?: return false
+        val container = MC.screen as? ContainerScreen ?: return false
         return container.title.string.contains("Manage Team: ${this@TeamImporter.name}")
     }
 
@@ -44,7 +48,7 @@ class TeamImporter(override var name: String) : Team {
         openTeamMenu()
 
         val tag = MenuUtils.findSlots(MenuItems.tag).first()
-            .stack
+            .item
             ?.getProperty("Current Tag")
             ?.removeSurrounding("[", "]")
             ?: throw IllegalStateException("Failed to get team tag")
@@ -57,7 +61,7 @@ class TeamImporter(override var name: String) : Team {
         openTeamMenu()
 
         val tag = MenuUtils.findSlots(MenuItems.tag).first()
-            .stack
+            .item
             ?.getProperty("Current Tag")
             ?.removeSurrounding("[", "]")
             ?: throw IllegalStateException("Failed to get team tag")
@@ -74,7 +78,7 @@ class TeamImporter(override var name: String) : Team {
 
         val color = Team.TeamColor.entries.find {
             it.displayName == MenuUtils.findSlots(MenuItems.color).first()
-                .stack
+                .item
                 ?.getProperty("Current Color")
         } ?: throw IllegalStateException("Failed to get team color")
 
@@ -87,7 +91,7 @@ class TeamImporter(override var name: String) : Team {
 
         val color = Team.TeamColor.entries.find {
             it.displayName == MenuUtils.findSlots(MenuItems.color).first()
-                .stack
+                .item
                 ?.getProperty("Current Color")
         } ?: throw IllegalStateException("Failed to get team color")
 
@@ -103,7 +107,7 @@ class TeamImporter(override var name: String) : Team {
         openTeamMenu()
 
         val friendlyFire = MenuUtils.findSlots(MenuItems.friendlyFire).first()
-            .stack
+            .item
             ?.getProperty("Current Value")
             ?.equals("Enabled") ?: throw IllegalStateException("Failed to get team friendly fire")
 
@@ -115,7 +119,7 @@ class TeamImporter(override var name: String) : Team {
 
         for (attempt in 1..10) {
             val friendlyFire = MenuUtils.findSlots(MenuItems.friendlyFire).first()
-                .stack
+                .item
                 ?.getProperty("Current Value")
                 ?.equals("Enabled") ?: throw IllegalStateException("Failed to get team friendly fire")
 
@@ -135,10 +139,10 @@ class TeamImporter(override var name: String) : Team {
         MenuUtils.onOpen("Teams")
 
         val gui = MenuUtils.currentMenu()
-        val slot = gui.screenHandler.slots
-            .find { it.stack.name.string == this@TeamImporter.name }
+        val slot = gui.menu.slots
+            .find { it.item.hoverName.string == this@TeamImporter.name }
             ?: return false
-        return slot.id <= 44
+        return slot.index <= 44
     }
 
     suspend fun create() {

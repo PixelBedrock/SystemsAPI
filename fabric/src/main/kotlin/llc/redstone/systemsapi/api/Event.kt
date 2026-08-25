@@ -1,8 +1,8 @@
 package llc.redstone.systemsapi.api
 
 import llc.redstone.systemsapi.importer.ActionContainer
-import net.minecraft.item.Item
-import net.minecraft.item.Items
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.Items
 
 /**
  * Provides accessors for Housing events, allowing retrieval of the [ActionContainer]

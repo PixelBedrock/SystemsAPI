@@ -10,30 +10,34 @@ import llc.redstone.test.tests.GroupsTest.withGroupsSubCommand
 import llc.redstone.test.tests.HouseSettingsTest.withHouseSettingsSubCommand
 import llc.redstone.test.tests.RegionsTest.withRegionsSubCommand
 import net.fabricmc.api.ClientModInitializer
+//? if <26.1 {
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal
+//?} else {
+/*import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+*///?}
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
-import net.minecraft.client.MinecraftClient
-import net.minecraft.text.MutableText
-import net.minecraft.text.PlainTextContent.of
-import net.minecraft.text.Style
-import net.minecraft.text.TextColor
+import net.minecraft.client.Minecraft
+import net.minecraft.network.chat.MutableComponent
+import net.minecraft.network.chat.Style
+import net.minecraft.network.chat.TextColor
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import net.minecraft.network.chat.contents.PlainTextContents.create as of
 
 object TestMod : ClientModInitializer {
     const val MOD_ID = "testmod"
     val LOGGER: Logger = LoggerFactory.getLogger("TestMod")
     const val VERSION = /*$ mod_version*/ "0.0.1"
     const val MINECRAFT = /*$ minecraft*/ "1.21.11"
-    val MC: MinecraftClient
-        get() = MinecraftClient.getInstance()
+    val MC: Minecraft
+        get() = Minecraft.getInstance()
 
     fun CommandContext<FabricClientCommandSource>.sendFeedback(label: String, value: Any) {
         val darkBlue = TextColor.fromRgb(0x1C5796)   // darker blue
         val lightBlue = TextColor.fromRgb(0x48719E)  // lighter blue
-        val labelText: MutableText = MutableText.of(of("$label: ")).setStyle(Style.EMPTY.withColor(darkBlue))
-        val valueText: MutableText = MutableText.of(of(value.toString())).setStyle(Style.EMPTY.withColor(lightBlue))
+        val labelText: MutableComponent = MutableComponent.create(of("$label: ")).setStyle(Style.EMPTY.withColor(darkBlue))
+        val valueText: MutableComponent = MutableComponent.create(of(value.toString())).setStyle(Style.EMPTY.withColor(lightBlue))
         this.source.sendFeedback(labelText.append(valueText))
     }
 
@@ -61,7 +65,7 @@ object TestMod : ClientModInitializer {
             dispatcher.register(
                 literal("testmod")
                     .executes {
-                        it.source.sendFeedback(MutableText.of(of("Usage: /testmod <feature>")))
+                        it.source.sendFeedback(MutableComponent.create(of("Usage: /testmod <feature>")))
                         1
                     }
                     .withHouseSettingsSubCommand()

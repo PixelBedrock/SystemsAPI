@@ -4,6 +4,7 @@ import kotlinx.coroutines.delay
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
 import llc.redstone.systemsapi.api.HouseSettings
 import llc.redstone.systemsapi.util.CommandUtils
+import llc.redstone.systemsapi.util.Dyes
 import llc.redstone.systemsapi.util.InputUtils
 import llc.redstone.systemsapi.util.InputUtils.getDyeToggle
 import llc.redstone.systemsapi.util.InputUtils.getInlineKeyedLoreCycle
@@ -18,7 +19,7 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameContains
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.Items
+import net.minecraft.world.item.Items
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.DurationUnit
@@ -139,9 +140,9 @@ object HouseSettingsImporter : HouseSettings {
         MenuUtils.clickItems(MenuItems.houseTags)
         MenuUtils.onOpen(Menu.HOUSE_TAGS.title)
 
-        val tags = MenuUtils.currentMenu().screenHandler.inventory.asSequence()
-            .filter { it.item == Items.LIME_DYE }
-            .map { it.name.string }
+        val tags = MenuUtils.currentMenu().menu.container.asSequence()
+            .filter { it.item == Dyes.LIME }
+            .map { it.hoverName.string }
             .map { display ->
                 HouseSettings.HouseTag.entries.firstOrNull { it.displayName == display }
                     ?: throw IllegalStateException("Unknown house tag '$display'")
@@ -160,18 +161,18 @@ object HouseSettingsImporter : HouseSettings {
         MenuUtils.onOpen(Menu.HOUSE_TAGS.title)
 
         // Deselect first
-        val toDeselect = MenuUtils.currentMenu().screenHandler.slots.asSequence()
-            .filter { it.stack.item == Items.LIME_DYE }
-            .filter { slot -> !newTags.map { it.displayName }.contains(slot.stack.name.string) }
+        val toDeselect = MenuUtils.currentMenu().menu.slots.asSequence()
+            .filter { it.item.item == Dyes.LIME }
+            .filter { slot -> !newTags.map { it.displayName }.contains(slot.item.hoverName.string) }
         for (slot in toDeselect) {
             setDyeToggle(slot, false)
             scaledDelay(2.0)
         }
 
         // Select
-        val toSelect = MenuUtils.currentMenu().screenHandler.slots.asSequence()
-            .filter { it.stack.item == Items.GRAY_DYE }
-            .filter { slot -> newTags.map { it.displayName }.contains(slot.stack.name.string) }
+        val toSelect = MenuUtils.currentMenu().menu.slots.asSequence()
+            .filter { it.item.item == Dyes.GRAY }
+            .filter { slot -> newTags.map { it.displayName }.contains(slot.item.hoverName.string) }
         for (slot in toSelect) {
             setDyeToggle(slot, true)
             scaledDelay(2.0)
@@ -187,9 +188,9 @@ object HouseSettingsImporter : HouseSettings {
         MenuUtils.clickItems(MenuItems.houseLanguage)
         MenuUtils.onOpen(Menu.HOUSE_LANGUAGE.title)
 
-        val languages = MenuUtils.currentMenu().screenHandler.inventory.asSequence()
-            .filter { it.item == Items.LIME_DYE }
-            .map { it.name.string }
+        val languages = MenuUtils.currentMenu().menu.container.asSequence()
+            .filter { it.item == Dyes.LIME }
+            .map { it.hoverName.string }
             .map { display ->
                 HouseSettings.HouseLanguage.entries.firstOrNull { display.startsWith(it.displayName) }
                     ?: throw IllegalStateException("Unknown house language '$display'")
@@ -209,18 +210,18 @@ object HouseSettingsImporter : HouseSettings {
 
         val names = newLanguages.map { it.displayName }
         // Deselect first
-        val toDeselect = MenuUtils.currentMenu().screenHandler.slots.asSequence()
-            .filter { it.stack.item == Items.LIME_DYE }
-            .filter { slot -> names.none { n -> slot.stack.name.string.startsWith(n) } }
+        val toDeselect = MenuUtils.currentMenu().menu.slots.asSequence()
+            .filter { it.item.item == Dyes.LIME }
+            .filter { slot -> names.none { n -> slot.item.hoverName.string.startsWith(n) } }
         for (slot in toDeselect) {
             setDyeToggle(slot, false)
             scaledDelay(2.0)
         }
 
         // Select
-        val toSelect = MenuUtils.currentMenu().screenHandler.slots.asSequence()
-            .filter { it.stack.item == Items.GRAY_DYE }
-            .filter { slot -> names.any { n -> slot.stack.name.string.startsWith(n) } }
+        val toSelect = MenuUtils.currentMenu().menu.slots.asSequence()
+            .filter { it.item.item == Dyes.GRAY }
+            .filter { slot -> names.any { n -> slot.item.hoverName.string.startsWith(n) } }
         for (slot in toSelect) {
             setDyeToggle(slot, true)
             scaledDelay(2.0)
@@ -428,7 +429,7 @@ object HouseSettingsImporter : HouseSettings {
         openPlayerDataMenu()
 
         return slots.first()
-            .stack
+            .item
             .getProperty("Duration")
             ?.let { if (it == "Disabled") Duration.ZERO else Duration.parse(it) }
     }

@@ -15,10 +15,15 @@ import llc.redstone.systemsapi.progress.OpKind
 import llc.redstone.systemsapi.progress.OpRecorder
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.loader.api.FabricLoader
-import net.minecraft.client.MinecraftClient
+import net.minecraft.client.Minecraft
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
+
+//? if >=26.2 {
+/*val Minecraft.screen: net.minecraft.client.gui.screens.Screen?
+    get() = this.gui.screen()
+*///?}
 
 object SystemsAPI : ClientModInitializer {
     internal const val MOD_ID = "systemsapi"
@@ -26,11 +31,11 @@ object SystemsAPI : ClientModInitializer {
     internal const val VERSION = /*$ mod_version*/ "0.1.11"
     internal const val MINECRAFT = /*$ minecraft*/ "1.21.9"
     internal val CONFIG = SystemsAPIConfig.createAndLoad()
-    internal val MC: MinecraftClient
-        get() = MinecraftClient.getInstance()
+    internal val MC: Minecraft
+        get() = Minecraft.getInstance()
     internal var DYNAMIC_FPS: DynamicFPSHook? = null
     init {
-        mcCoroutineConfiguration.minecraftExecutor = MinecraftClient.getInstance()
+        mcCoroutineConfiguration.minecraftExecutor = Minecraft.getInstance()
     }
 
     override fun onInitializeClient() {

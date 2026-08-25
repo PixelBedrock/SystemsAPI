@@ -2,7 +2,7 @@ package llc.redstone.systemsapi.progress
 
 import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
-import net.minecraft.screen.slot.Slot
+import net.minecraft.world.inventory.Slot
 
 /**
  * Predicts what an export will cost.
@@ -11,11 +11,14 @@ import net.minecraft.screen.slot.Slot
  * says how many entries are present, which values are truncated with `...` and therefore need a trip
  * into the property to read, and which sub-actions each nested property holds, by name.
  *
- * A container is walked twice: forward through every page pricing them from lore alone, then back
- * again doing the real reading. By the time any expensive work starts the total is already known,
- * instead of lurching upward each time a nested container is opened. Conditions have no nested lists
- * of their own, so their pages are discovered and read together in one pass; only actions need the
- * two-pass treatment.
+ * A container is walked twice, both times forward: once pricing every page from lore alone, then
+ * again to actually read it, returning to page 1 in between. By the time any expensive reading
+ * starts the total is already known, instead of lurching upward each time a nested container is
+ * opened. Conditions have no nested lists of their own, so their pages are discovered and read
+ * together in one pass; only actions need the two-pass treatment.
+ *
+ * Reading happens in the same order pages were discovered in, so a page's descents are consumed in
+ * the order they were recorded -- no re-ordering needed between the two passes.
  *
  * ### Reconciling a descent
  *
@@ -42,15 +45,14 @@ internal object ExportPlanner {
 
     /**
      * Net round-trips a container's first page costs across both passes: discovery reaches it for
-     * free (it is wherever the container was opened to), so only the reading pass's final arrival
-     * here, at the end, is real.
+     * free (it is wherever the container was opened to), and the click that returns to it at the end
+     * of discovery is the one real cost.
      */
     const val FIRST_PAGE_ROUNDTRIPS = 1
 
     /**
-     * Net round-trips a later page costs across both passes: one to arrive during discovery, one
-     * to arrive again during reading. Slightly over-charges whichever page turns out to be the
-     * last, since reading starts there for free -- a small, harmless overestimate.
+     * Net round-trips a later page costs across both passes: one to arrive during discovery, one to
+     * arrive again during reading.
      */
     const val LATER_PAGE_ROUNDTRIPS = 2
 
@@ -63,8 +65,8 @@ internal object ExportPlanner {
      * One container's descent bookkeeping.
      *
      * [discovered] collects each page's provisional contents charges in discovery order; [queue] is
-     * the same set re-ordered for the reading pass, which visits pages back to front but reads each
-     * page's own entries left to right as always.
+     * the same entries flattened into that same order for the reading pass to drain, since both
+     * passes visit pages front to back.
      */
     private class Frame {
         val discovered = mutableListOf<List<Cost>>()
@@ -123,14 +125,14 @@ internal object ExportPlanner {
     }
 
     /**
-     * Ends discovery for the container currently open. Descents are queued last-page-first, since
-     * reading (when it happens in a second pass) visits pages in that order; for a container read in
-     * a single pass this just makes its one page's descents available immediately.
+     * Ends discovery for the container currently open. Descents are queued in the same order pages
+     * were discovered in, since the reading pass (when there is a separate one) revisits pages in
+     * that same front-to-back order.
      */
     fun finishDiscovery() {
         val frame = currentFrame()
         frame.queue.clear()
-        frame.discovered.asReversed().forEach { frame.queue.addAll(it) }
+        frame.discovered.forEach { frame.queue.addAll(it) }
         frame.discovered.clear()
 
         // Only the outermost container decides whether the export as a whole is still unbounded.
@@ -174,12 +176,12 @@ internal object ExportPlanner {
         val contents = mutableListOf<Cost>()
 
         for (slot in slots) {
-            if (!slot.hasStack()) break
+            if (!slot.hasItem()) break
             entryCount++
 
             // Colour codes off: a styled line reads "&7 - Send Message", which no structural test
             // would recognise.
-            val lines = slot.stack.loreLines(false)
+            val lines = slot.item.loreLines(false)
             var index = 0
             while (index < lines.size) {
                 val line = lines[index]

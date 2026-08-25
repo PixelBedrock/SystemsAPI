@@ -15,7 +15,7 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameContains
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.Items
+import net.minecraft.world.item.Items
 
 open class NpcImporter(override var name: String) : Npc {
     private fun getCurrentMenu(): String? = runCatching { MenuUtils.currentMenu().title.string }.getOrNull()
@@ -68,7 +68,7 @@ open class NpcImporter(override var name: String) : Npc {
 
         return NpcType.entries.firstOrNull() {
             it.displayName == MenuUtils.findSlots(MenuItems.type).first()
-                .stack
+                .item
                 .getProperty("Currently Selected")
         } ?: throw IllegalStateException("Could not find NPC type")
     }

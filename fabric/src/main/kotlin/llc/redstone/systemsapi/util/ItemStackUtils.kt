@@ -1,34 +1,34 @@
 package llc.redstone.systemsapi.util
 
 import llc.redstone.systemsapi.SystemsAPI.MC
-import net.minecraft.component.DataComponentTypes
-import net.minecraft.item.ItemStack
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket
-import net.minecraft.world.GameMode
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.GameType
 
 object ItemStackUtils {
     fun ItemStack.giveItem(slot: Int) {
         val gameMode = MC.player
-            ?.gameMode ?: throw IllegalStateException("Could not determine player's game mode")
-        if (gameMode != GameMode.CREATIVE) CommandUtils.runCommand("/gmc")
+            ?.let { MC.gameMode?.playerMode } ?: throw IllegalStateException("Could not determine player's game mode")
+        if (gameMode != GameType.CREATIVE) CommandUtils.runCommand("/gmc")
 
-        val pkt = CreativeInventoryActionC2SPacket(
+        val pkt = ServerboundSetCreativeModeSlotPacket(
             slot,
             this
         )
-        MC.networkHandler?.sendPacket(pkt)
-            ?: throw IllegalStateException("Something went wrong while creating item ${item.name}")
+        MC.connection?.send(pkt)
+            ?: throw IllegalStateException("Something went wrong while creating item ${item.getName(this)}")
 
         when (gameMode) {
-            GameMode.SURVIVAL -> CommandUtils.runCommand("/gms")
-            GameMode.ADVENTURE -> CommandUtils.runCommand("/gma")
+            GameType.SURVIVAL -> CommandUtils.runCommand("/gms")
+            GameType.ADVENTURE -> CommandUtils.runCommand("/gma")
             else -> {}
         }
     }
 
     fun ItemStack.getProperty(key: String): String? {
-        return this.get(DataComponentTypes.LORE)
-            ?.lines
+        return this.get(DataComponents.LORE)
+            ?.lines()
             ?.firstNotNullOfOrNull { line ->
                 line.string.substringAfter("$key: ").takeIf { it != line.string }
             }
@@ -61,7 +61,7 @@ object ItemStackUtils {
     }
 
     fun ItemStack.loreLines(color: Boolean): List<String> {
-        val loreLines = this.get(DataComponentTypes.LORE)?.lines
+        val loreLines = this.get(DataComponents.LORE)?.lines()
             ?: return emptyList()
         return loreLines.map { TextUtils.convertTextToString(it, color)!! }
     }

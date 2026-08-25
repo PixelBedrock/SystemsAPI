@@ -1,5 +1,9 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import llc.redstone.systemsapi.SystemsAPI.LOGGER
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.SystemsAPI.scaledDelay
@@ -14,8 +18,8 @@ import llc.redstone.systemsapi.util.TextUtils
 import llc.redstone.systemsdata.Action
 import llc.redstone.systemsdata.ActionDefinition
 import llc.redstone.systemsdata.VariableHolder
-import net.minecraft.item.Items
-import net.minecraft.screen.slot.Slot
+import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.Items
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty1
@@ -26,7 +30,7 @@ import kotlin.reflect.jvm.isAccessible
 
 //The title of the actions gui, either Actions: <name> or Edit Actions
 class ActionContainer(
-    val title: String = MC.currentScreen?.title?.string ?: throw IllegalStateException("No screen is currently open")
+    val title: String = MC.screen?.title?.string ?: throw IllegalStateException("No screen is currently open")
 ) {
     companion object {
         private val slots = mutableMapOf(
@@ -83,21 +87,24 @@ class ActionContainer(
         }
         ExportPlanner.finishDiscovery()
 
-        // Pass two: read back to the front with the previous-page arrow. The walk out already left
-        // us on the last page, so this is the first time it's exercised outside of that item's own
-        // definition -- if it lands anywhere but the page just left, results will come back wrong or
-        // duplicated, so watch the exported count on a container with more than 21 actions.
-        val byPage = ArrayList<List<Action>>(pages)
-        for (page in pages downTo 1) {
-            byPage.add(readCurrentPage())
-            if (page > 1) {
-                MenuUtils.clickItems(MenuUtils.GlobalMenuItems.PREVIOUS_PAGE)
-                MenuUtils.onOpen(title, checkIfOpen = false)
-                LOGGER.debug("Export: walked back to page {} of {}, now on '{}'", page - 1, pages, MC.currentScreen?.title?.string)
-            }
+        // Go back to page 1
+        if (pages > 1) {
+            MenuUtils.clickItems(MenuUtils.GlobalMenuItems.PREVIOUS_PAGE, button = 1)
+            MenuUtils.onOpen(title, checkIfOpen = false)
+            LOGGER.debug("Export: returned to page 1 of {}, now on '{}'", pages, MC.screen?.title?.string)
         }
 
-        byPage.asReversed().flatten()
+        // Pass two: read forward again, one page at a time, with the same navigation proven in pass
+        // one -- the total is already known from discovery, so this pass is purely reading.
+        val actions = mutableListOf<Action>()
+        while (true) {
+            actions.addAll(readCurrentPage())
+            if (MenuUtils.findSlots(MenuUtils.GlobalMenuItems.NEXT_PAGE).firstOrNull() == null) break
+            MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
+            MenuUtils.onOpen(" $title", checkIfOpen = false)
+        }
+
+        actions
     }
 
     private fun currentPageSlots(): List<Slot> = slots.values.map { MenuUtils.getSlot(it) }
@@ -106,7 +113,7 @@ class ActionContainer(
         val actions = mutableListOf<Action>()
         for (slotIndex in slots.values) {
             val slot = MenuUtils.getSlot(slotIndex)
-            if (!slot.hasStack()) break
+            if (!slot.hasItem()) break
 
             parseAction(slot)?.let { actions.add(it) }
         }
@@ -115,10 +122,10 @@ class ActionContainer(
     }
 
     private suspend fun parseAction(slot: Slot): Action? {
-        val item = slot.stack
+        val item = slot.item
         val loreLines = item.loreLines(true).filter { it.contains(":") }
         val allLines = item.loreLines(true)
-        val name = TextUtils.convertTextToString(item.name, false)
+        val name = TextUtils.convertTextToString(item.hoverName, false)
 
         val actionClass = Action::class.sealedSubclasses.firstOrNull {
             it.findAnnotations(ActionDefinition::class).any { ann -> ann.displayName == name }
@@ -199,7 +206,7 @@ class ActionContainer(
                     val actionSlots = mutableListOf<Int>()
                     for (slotIndex in slots.values) {
                         val slot = MenuUtils.getSlot(slotIndex)
-                        if (!slot.hasStack()) break //No more actions
+                        if (!slot.hasItem()) break //No more actions
                         actionSlots.add(slotIndex)
                     }
 

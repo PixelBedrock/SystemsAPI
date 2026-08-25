@@ -2,6 +2,10 @@
 
 package llc.redstone.systemsapi.util
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
@@ -18,16 +22,20 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameContains
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameWithin
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen
-import net.minecraft.client.gui.screen.ingame.HandledScreen
-import net.minecraft.item.Item
-import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
-import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket
-import net.minecraft.screen.slot.Slot
-import net.minecraft.screen.slot.SlotActionType
-import net.minecraft.screen.sync.ItemStackHash
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.network.HashedStack
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket
+//? if >=26.1 {
+/*import net.minecraft.world.inventory.ContainerInput
+*///?} else {
+import net.minecraft.world.inventory.ClickType
+//?}
+import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import kotlin.reflect.KClass
 
 object MenuUtils {
@@ -36,13 +44,13 @@ object MenuUtils {
     var pendingNameMatch: NameMatch? = null
 
     suspend fun onCurrentScreenUpdate() {
-        val screen = MC.currentScreen ?: return
+        val screen = MC.screen ?: return
         onOpen(screen.title?.string ?: return, checkIfOpen = false)
     }
 
     suspend fun onOpen(
         name: String,
-        vararg clazz: KClass<out Screen>? = arrayOf(GenericContainerScreen::class),
+        vararg clazz: KClass<out Screen>? = arrayOf(ContainerScreen::class),
         checkIfOpen: Boolean = true
     ): Screen? {
         return onOpen(NameContains(name), *clazz, checkIfOpen = checkIfOpen)
@@ -50,7 +58,7 @@ object MenuUtils {
 
     suspend fun onOpen(
         nameMatch: NameMatch?,
-        vararg clazz: KClass<out Screen>? = arrayOf(GenericContainerScreen::class),
+        vararg clazz: KClass<out Screen>? = arrayOf(ContainerScreen::class),
         checkIfOpen: Boolean = false,
         errorCorrection: Boolean = true
     ): Screen? = OpRecorder.span(OpKind.MENU_ROUNDTRIP) { span ->
@@ -58,7 +66,7 @@ object MenuUtils {
             pendingScreen = null
             pendingNameMatch = null
             pendingClazz = arrayOf()
-            if (MC.currentScreen is HandledScreen<*>) awaitUntilMenuItemsLoaded()
+            if (MC.screen is AbstractContainerScreen<*>) awaitUntilMenuItemsLoaded()
         }
 
         val deferred = CompletableDeferred<Screen?>()
@@ -68,7 +76,7 @@ object MenuUtils {
         pendingNameMatch = nameMatch
 
         val alreadyOpen = if (checkIfOpen) {
-            MC.currentScreen?.takeIf { screen ->
+            MC.screen?.takeIf { screen ->
                 pendingClazz.any { it?.isInstance(screen) == true } &&
                     pendingNameMatch?.matches(screen.title?.string ?: "null") != false
             }
@@ -86,13 +94,13 @@ object MenuUtils {
                 }
             } catch (_: Exception) {
                 span.timedOut = true
-                if (checkScreen(MC.currentScreen)) {
+                if (checkScreen(MC.screen)) {
                     LOGGER.debug("Menu opened during timeout: {}", nameMatch)
-                    MC.currentScreen
+                    MC.screen
                 } else {
                     if (errorCorrection && ErrorCorrection.onMenuTimeout()) {
                         LOGGER.debug("Menu corrected on timeout: {}", nameMatch)
-                        MC.currentScreen
+                        MC.screen
                     } else {
                         error("Timed out waiting for menu: $nameMatch")
                     }
@@ -105,7 +113,7 @@ object MenuUtils {
 
     internal fun completeOnClose() {
         val pending = pendingScreen ?: return
-        val screen = MC.currentScreen
+        val screen = MC.screen
         if (!checkScreen(screen)) return
         pendingScreen = null
         pending.complete(null)
@@ -156,17 +164,17 @@ object MenuUtils {
 
     internal fun render() {
         if (!isLoading) return
-        val screen = MC.currentScreen as? HandledScreen<*> ?: return
+        val screen = MC.screen as? AbstractContainerScreen<*> ?: return
         val delay = 0L // your gui delay
         if (System.currentTimeMillis() - lastItemAddedTimestamp < delay) return
 
-        val slots = screen.screenHandler.slots
+        val slots = screen.menu.slots
         var startIndex = slots.size - 44
         if (startIndex < 0) {
             startIndex = 0
         }
         val hotbarSlots = slots.subList(startIndex, startIndex + 9)
-        if (hotbarSlots.all { it.stack.isEmpty }) return
+        if (hotbarSlots.all { it.item.isEmpty }) return
         isLoading = false
         val pending = pendingLoaded ?: return
         pendingLoaded = null
@@ -175,7 +183,7 @@ object MenuUtils {
 
     internal fun renderStack(stack: ItemStack) {
         if (!isLoading) return
-        val displayName = stack.name.string
+        val displayName = stack.hoverName.string
         if (itemsLoaded.containsKey(displayName)) return
         lastItemAddedTimestamp = System.currentTimeMillis()
         itemsLoaded[displayName] = stack
@@ -185,9 +193,9 @@ object MenuUtils {
         ErrorCorrection.lastPlayerSlotClick = BasicClick(slot, button)
         val gui = currentMenu()
         val playerSlot = when (slot) {
-            in 0..8 -> slot + gui.screenHandler.slots.size - 9
+            in 0..8 -> slot + gui.menu.slots.size - 9
             in 9..35 -> {
-                slot + gui.screenHandler.slots.size - 45
+                slot + gui.menu.slots.size - 45
             }
             else -> throw IllegalArgumentException("Invalid player slot index: $slot")
         }
@@ -198,37 +206,52 @@ object MenuUtils {
 
     fun packetClick(slot: Int, button: Int = 0) {
         ErrorCorrection.lastMenuSlotClick = BasicClick(slot, button)
-        val gui = MC.currentScreen as? HandledScreen<*> ?: return
+        val gui = MC.screen as? AbstractContainerScreen<*> ?: return
 
-        val pkt = ClickSlotC2SPacket(
-            gui.screenHandler.syncId,
-            gui.screenHandler.revision,
+        val pkt = ServerboundContainerClickPacket(
+            gui.menu.containerId,
+            gui.menu.stateId,
             slot.toShort(),
             button.toByte(),
-            SlotActionType.PICKUP,
+            //? if >=26.1 {
+            /*ContainerInput.PICKUP,
+            *///?} else {
+            ClickType.PICKUP,
+            //?}
             Int2ObjectOpenHashMap(),
-            ItemStackHash.EMPTY
+            HashedStack.EMPTY
         )
 
-        MC.networkHandler?.sendPacket(pkt) ?: error("Failed to send click packet")
+        MC.connection?.send(pkt) ?: error("Failed to send click packet")
     }
 
     fun interactionClick(slot: Int, button: Int = 0) {
         ErrorCorrection.lastMenuSlotClick = BasicClick(slot, button)
-        val gui = MC.currentScreen as? HandledScreen<*> ?: return
+        val gui = MC.screen as? AbstractContainerScreen<*> ?: return
 
-        MC.interactionManager?.clickSlot(
-            gui.screenHandler.syncId,
+        val player = MC.player ?: return
+        //? if >=26.1 {
+        /*MC.gameMode?.handleContainerInput(
+            gui.menu.containerId,
             slot,
             button,
-            SlotActionType.PICKUP,
-            MC.player
+            ContainerInput.PICKUP,
+            player
         )
+        *///?} else {
+        MC.gameMode?.handleInventoryMouseClick(
+            gui.menu.containerId,
+            slot,
+            button,
+            ClickType.PICKUP,
+            player
+        )
+        //?}
     }
 
-    fun currentMenu(): GenericContainerScreen =
-        MC.currentScreen as? GenericContainerScreen
-        ?: throw ClassCastException("Expected GenericContainerScreen but found ${MC.currentScreen?.javaClass?.name}")
+    fun currentMenu(): ContainerScreen =
+        MC.screen as? ContainerScreen
+        ?: throw ClassCastException("Expected ContainerScreen but found ${MC.screen?.javaClass?.name}")
 
     // FINDING ITEMS IN MENUS
 
@@ -242,7 +265,7 @@ object MenuUtils {
         paginated: Boolean = false,
         cacheKey: String? = null
     ): List<Slot> {
-        fun currentSlots() = currentMenu().screenHandler.slots.filter { predicate(it.stack) }
+        fun currentSlots() = currentMenu().menu.slots.filter { predicate(it.item) }
 
         val learnKey = if (paginated) cacheKey else null
         val menuTitle = if (learnKey != null) currentMenu().title.string else null
@@ -253,7 +276,7 @@ object MenuUtils {
             val nextPageSlot = findSlots(GlobalMenuItems.NEXT_PAGE).firstOrNull() ?: return emptyList()
             // Spanned rather than timed inline so the scaledDelay inside is not counted twice.
             OpRecorder.span(OpKind.PAGE_TURN) {
-                packetClick(nextPageSlot.id)
+                packetClick(nextPageSlot.index)
                 scaledDelay(4.0)
             }
             turns++
@@ -265,13 +288,13 @@ object MenuUtils {
 
     suspend fun findSlots(name: String, paginated: Boolean = false, partial: Boolean = false): List<Slot> {
         return findSlots({
-            if (!partial) it.name.string == name else it.name.string.contains(name)
+            if (!partial) it.hoverName.string == name else it.hoverName.string.contains(name)
         }, paginated, cacheKey = name)
     }
 
     suspend fun findSlots(name: String, item: Item, paginated: Boolean = false): List<Slot> {
         return findSlots({
-            it.name.string == name &&
+            it.hoverName.string == name &&
             it.item == item
         }, paginated, cacheKey = name)
     }
@@ -281,7 +304,7 @@ object MenuUtils {
     }
 
     fun getSlot(slotIndex: Int): Slot {
-        return currentMenu().screenHandler.getSlot(slotIndex)
+        return currentMenu().menu.getSlot(slotIndex)
     }
 
     // CLICKING ITEMS IN MENUS
@@ -294,8 +317,8 @@ object MenuUtils {
     ) {
         findSlots(predicate, paginated, cacheKey).forEach { slot ->
             when (packet) {
-                true -> packetClick(slot.id, button)
-                false -> interactionClick(slot.id, button)
+                true -> packetClick(slot.index, button)
+                false -> interactionClick(slot.index, button)
             }
         }
     }
@@ -303,7 +326,7 @@ object MenuUtils {
     suspend fun clickItems(name: String, packet: Boolean = false, button: Int = 0, paginated: Boolean = false) {
         clickItems(
             {
-                it.name.string == name
+                it.hoverName.string == name
             },
             packet,
             button,
@@ -315,7 +338,7 @@ object MenuUtils {
     suspend fun clickItems(name: String, item: Item, packet: Boolean = true, button: Int = 0, paginated: Boolean = false) {
         clickItems(
             {
-                it.name.string == name &&
+                it.hoverName.string == name &&
                 it.item == item
             },
             packet,

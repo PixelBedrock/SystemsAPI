@@ -1,12 +1,23 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    kotlin("jvm") version "2.2.10"
-    id("fabric-loom")
+    kotlin("jvm") version "2.3.0"
+    id("dev.kikugie.loom-back-compat")
     `maven-publish`
 }
 
 version = "${property("mod.version")}+${stonecutter.current.version}"
 base.archivesName = property("mod.id") as String
 group = "llc.redstone"
+
+val requiredJava: JavaVersion = when {
+    stonecutter.current.parsed >= "26.1" -> JavaVersion.VERSION_25
+    stonecutter.current.parsed >= "1.20.5" -> JavaVersion.VERSION_21
+    stonecutter.current.parsed >= "1.18" -> JavaVersion.VERSION_17
+    stonecutter.current.parsed >= "1.17" -> JavaVersion.VERSION_16
+    else -> JavaVersion.VERSION_1_8
+}
 
 repositories {
     maven("https://repo.redstone.llc/releases")
@@ -32,7 +43,7 @@ repositories {
 val common = checkNotNull(stonecutter.node.sibling("fabric"))
 dependencies {
     minecraft("com.mojang:minecraft:${stonecutter.current.version}")
-    mappings("net.fabricmc:yarn:${property("deps.yarn")}:v2")
+    loomx.applyMojangMappings()
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
     modImplementation("io.wispforest:owo-lib:${property("deps.owo")}")
     modImplementation("net.fabricmc:fabric-language-kotlin:${property("deps.fabric_language_kotlin")}")
@@ -63,9 +74,20 @@ loom {
 
 java {
     withSourcesJar()
-    val javaVersion: JavaVersion = JavaVersion.VERSION_21
-    targetCompatibility = javaVersion
-    sourceCompatibility = javaVersion
+    targetCompatibility = requiredJava
+    sourceCompatibility = requiredJava
+}
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(requiredJava.majorVersion))
+    }
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(requiredJava.majorVersion))
+    }
 }
 
 publishing {
@@ -92,13 +114,5 @@ tasks {
         )
 
         filesMatching("fabric.mod.json") { expand(props) }
-    }
-
-    // Builds the version into a shared folder in `build/libs/${mod version}/`
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(remapJar.map { it.archiveFile }, remapSourcesJar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod.version")}"))
-        dependsOn("build")
     }
 }

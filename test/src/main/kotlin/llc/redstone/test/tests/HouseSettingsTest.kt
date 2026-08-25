@@ -4,15 +4,17 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import llc.redstone.systemsapi.SystemsAPI
 import llc.redstone.systemsapi.api.HouseSettings
-import llc.redstone.test.TestMod
-import llc.redstone.test.TestMod.MC
 import llc.redstone.test.TestMod.sendFeedback
+//? if <26.1 {
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal
+//?} else {
+/*import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+*///?}
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
-import net.minecraft.text.MutableText
-import net.minecraft.text.PlainTextContent.of
+import net.minecraft.network.chat.MutableComponent
 import java.awt.Color
 import kotlin.time.Duration
+import net.minecraft.network.chat.contents.PlainTextContents.create as of
 
 object HouseSettingsTest {
     fun LiteralArgumentBuilder<FabricClientCommandSource>.withHouseSettingsSubCommand(): LiteralArgumentBuilder<FabricClientCommandSource> {
@@ -72,10 +74,10 @@ object HouseSettingsTest {
                 context.sendFeedback("Fishing Settings", settings.getFishingSettings())
             } catch (e: Exception) {
                 e.printStackTrace()
-                MC.player?.sendMessage(
-                    MutableText.of(
+                context.source.sendFeedback(
+                    MutableComponent.create(
                         of("[Test Mod] An error occurred: ${e.message}")
-                    ).withColor(Color.RED.rgb), false
+                    ).withColor(Color.RED.rgb)
                 )
             }
         }

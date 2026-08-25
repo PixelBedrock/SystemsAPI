@@ -1,5 +1,9 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import kotlinx.coroutines.cancelChildren
 import llc.redstone.systemsapi.SystemsAPI
 import llc.redstone.systemsapi.SystemsAPI.MC
@@ -173,7 +177,7 @@ internal object HouseImporter : House {
     }
 
     override suspend fun getOpenConditionContainer(): ConditionContainer? {
-        if (MC.currentScreen?.title?.string?.contains("Edit Conditions") != true) return null
+        if (MC.screen?.title?.string?.contains("Edit Conditions") != true) return null
         return ConditionContainer
     }
 

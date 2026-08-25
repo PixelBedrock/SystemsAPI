@@ -1,5 +1,9 @@
 package llc.redstone.systemsapi.importer
 
+//? if >=26.2 {
+/*import llc.redstone.systemsapi.screen
+*///?}
+
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.api.Menu
 import llc.redstone.systemsapi.util.ChatUtils
@@ -10,14 +14,14 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen
-import net.minecraft.component.DataComponentTypes
-import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
+import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.core.component.DataComponents
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 
 internal class MenuImporter(override var title: String) : Menu {
     private fun isMenuEditMenuOpen(): Boolean {
-        val container = MC.currentScreen as? GenericContainerScreen ?: return false
+        val container = MC.screen as? ContainerScreen ?: return false
         return container.title.string.contains("Edit Menu: $title")
     }
 
@@ -40,8 +44,8 @@ internal class MenuImporter(override var title: String) : Menu {
         openMenuEditMenu()
         MenuUtils.clickItems(MenuItems.size)
         MenuUtils.onOpen("Change Menu Size")
-        val stack = (MC.currentScreen as GenericContainerScreen).screenHandler.inventory.first { stack -> stack.hasGlint() || stack.hasEnchantments() }
-        return Regex("""\d+""").find(stack.name.string)?.value?.toIntOrNull() ?: throw IllegalStateException("[Menu $title] Couldn't find menu size.")
+        val stack = (MC.screen as ContainerScreen).menu.container.first { stack -> stack.hasFoil() || stack.isEnchanted }
+        return Regex("""\d+""").find(stack.hoverName.string)?.value?.toIntOrNull() ?: throw IllegalStateException("[Menu $title] Couldn't find menu size.")
     }
 
     override suspend fun setMenuSize(newSize: Int): Menu {
@@ -59,7 +63,7 @@ internal class MenuImporter(override var title: String) : Menu {
         MenuUtils.clickItems(MenuItems.elements)
         MenuUtils.onOpen("Edit Elements: $title")
         val gui = MenuUtils.currentMenu()
-        val numSlots = 9 * gui.screenHandler.rows
+        val numSlots = 9 * gui.menu.rowCount
         return Array(numSlots) { index -> MenuElementImporter(index, title) }
     }
 
@@ -68,7 +72,7 @@ internal class MenuImporter(override var title: String) : Menu {
         MenuUtils.clickItems(MenuItems.elements)
         MenuUtils.onOpen("Edit Elements: $title")
         val gui = MenuUtils.currentMenu()
-        val numSlots = 9 * gui.screenHandler.rows
+        val numSlots = 9 * gui.menu.rowCount
         if (index !in 0..<numSlots) throw IllegalArgumentException("Index must be in 0..${numSlots-1}")
         return MenuElementImporter(index, title)
     }
@@ -104,7 +108,7 @@ internal class MenuImporter(override var title: String) : Menu {
             MenuUtils.packetClick(slot, 1)
             MenuUtils.onOpen("Select an Item")
 
-            val stack = MenuUtils.findSlots(MenuItems.currentItem).first().stack
+            val stack = MenuUtils.findSlots(MenuItems.currentItem).first().item
             return InputUtils.getItemFromMenu(null, stack) {
                 MenuUtils.clickItems(MenuItems.currentItem)
             }
@@ -117,7 +121,7 @@ internal class MenuImporter(override var title: String) : Menu {
             MenuUtils.packetClick(slot, 1)
             MenuUtils.onOpen("Select an Item")
 
-            val oldStack = player.inventory.getStack(26)
+            val oldStack = player.inventory.getItem(26)
             item.giveItem(26)
             MenuUtils.clickPlayerSlot(26)
             oldStack.giveItem(26)
@@ -126,8 +130,8 @@ internal class MenuImporter(override var title: String) : Menu {
 
         override suspend fun getActionContainer(): ActionContainer? {
             val gui = MenuUtils.currentMenu()
-            val item = gui.screenHandler.inventory.getStack(slot)
-            if (item.name.string == "Empty Slot" && item.get(DataComponentTypes.LORE)?.lines?.get(0)?.string == "Click to set item!") return null // Slot must first have an item before it can have an ActionContainer
+            val item = gui.menu.container.getItem(slot)
+            if (item.hoverName.string == "Empty Slot" && item.get(DataComponents.LORE)?.lines()?.get(0)?.string == "Click to set item!") return null // Slot must first have an item before it can have an ActionContainer
 
             MenuUtils.onOpen("Edit Elements: $title")
 

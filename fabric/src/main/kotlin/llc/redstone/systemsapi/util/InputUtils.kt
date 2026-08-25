@@ -13,19 +13,19 @@ import llc.redstone.systemsapi.progress.OpRecorder
 import llc.redstone.systemsapi.util.ItemStackUtils.getLoreLineMatches
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
 import llc.redstone.systemsapi.util.TextUtils.convertTextToString
-import net.minecraft.client.gui.screen.ChatScreen
-import net.minecraft.client.gui.screen.ingame.AnvilScreen
-import net.minecraft.client.resource.language.I18n
-import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
-import net.minecraft.network.packet.c2s.play.RenameItemC2SPacket
-import net.minecraft.screen.slot.Slot
+import net.minecraft.client.gui.screens.ChatScreen
+import net.minecraft.client.gui.screens.inventory.AnvilScreen
+import net.minecraft.client.resources.language.I18n
+import net.minecraft.network.protocol.game.ServerboundRenameItemPacket
+import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 
 object InputUtils {
 
     // For cycling inputs where the current value is indicated in lore with a "➠" symbol
     fun getKeyedCycle(slot: Slot): String {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
         val currentLine = stack.getLoreLineMatches(false) { str -> str.contains("➠") }
         return currentLine.substringAfter("➠ ")
     }
@@ -34,15 +34,15 @@ object InputUtils {
      * can be learned. Cycling's cost is entirely determined by how far around the cycle the target
      * sits, so an average is a poor estimate.
      */
-    suspend fun setKeyedCycle(slot: Slot, value: String, cycleKey: String = slot.stack.name.string) {
-        val entryCount = slot.stack.loreLines(false).size - 3
+    suspend fun setKeyedCycle(slot: Slot, value: String, cycleKey: String = slot.item.hoverName.string) {
+        val entryCount = slot.item.loreLines(false).size - 3
         var steps = 0
         repeat(entryCount) {
             if (getKeyedCycle(slot) == value) {
                 CostModel.recordCycleSteps(cycleKey, value, steps)
                 return
             }
-            MenuUtils.packetClick(slot.id)
+            MenuUtils.packetClick(slot.index)
             MenuUtils.onCurrentScreenUpdate()
             steps++
         }
@@ -51,15 +51,15 @@ object InputUtils {
 
     // For cycling inputs where the current value is displayed in the title, like "Join/Leave Messages: On"
     fun getKeyedTitleCycle(slot: Slot, key: String): String {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
-        return stack.name.string.substringAfter("$key: ")
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
+        return stack.hoverName.string.substringAfter("$key: ")
     }
     suspend fun setKeyedTitleCycle(slot: Slot, key: String, value: String, confirm: Boolean = false) {
         repeat(50) {
-            val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
-            val current = stack.name.string.substringAfter("$key: ")
+            val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
+            val current = stack.hoverName.string.substringAfter("$key: ")
             if (current == value) return
-            MenuUtils.packetClick(slot.id)
+            MenuUtils.packetClick(slot.index)
             if (confirm) {
                 val oldScreenName = MenuUtils.currentMenu().title.string
 //                MenuUtils.onOpen("Are you sure?") // TODO: Why does this not work?
@@ -74,26 +74,26 @@ object InputUtils {
 
     // for cycling inputs where the current value is displayed in lore
     fun getLoreCycle(slot: Slot, possibleValues: List<String>): String {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
         return stack.loreLines(false).firstNotNullOfOrNull { line ->
             possibleValues.firstOrNull { pv -> line.contains(pv) }
         } ?: throw IllegalStateException("Could not find the current selection for Lore Cycle")
     }
     suspend fun setLoreCycle(slot: Slot, possibleValues: List<String>, value: String, maxTries: Int = 10) {
         repeat(maxTries) {
-            val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+            val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
             val current = stack.loreLines(false).firstNotNullOfOrNull { line ->
                 possibleValues.firstOrNull { pv -> line.contains(pv) }
             } ?: throw IllegalStateException("Could not find the current selection for Lore Cycle")
             if (current == value) return
-            MenuUtils.packetClick(slot.id)
+            MenuUtils.packetClick(slot.index)
             MenuUtils.onCurrentScreenUpdate()
         }
         throw IllegalStateException("Could not find the correct selection for Lored Cycle")
     }
 
     fun getKeyedLoreCycle(slot: Slot, key: String): String {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
         val lines = stack.loreLines(false)
         val index = lines.indexOfFirst { it == "$key:" }
         if (index == -1 || index + 1 >= lines.size) throw IllegalStateException("Could not find the correct selection for Lored Keyed Cycle")
@@ -101,20 +101,20 @@ object InputUtils {
     }
     suspend fun setKeyedLoreCycle(slot: Slot, key: String, newValue: String, button: Int = 0) {
         repeat(10) {
-            val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+            val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
             val lines = stack.loreLines(false)
             val index = lines.indexOfFirst { it == "$key:" }
             if (index == -1 || index + 1 >= lines.size) return@repeat
             val content = lines[index + 1]
 
             if (content == newValue) return
-            MenuUtils.packetClick(slot.id, button = button)
+            MenuUtils.packetClick(slot.index, button = button)
             MenuUtils.onCurrentScreenUpdate()
         }
     }
 
     fun getInlineKeyedLoreCycle(slot: Slot, key: String): String {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
         return stack.loreLines(false).firstNotNullOfOrNull { line ->
             val result = line.substringAfter("$key: ")
             if (result != line) result else null
@@ -122,24 +122,24 @@ object InputUtils {
     }
     suspend fun setInlineKeyedLoreCycle(slot: Slot, key: String, newValue: String, button: Int = 0) {
         repeat(10) {
-            val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+            val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
             val current = stack.loreLines(false).firstNotNullOfOrNull { line ->
                 val result = line.substringAfter("$key: ")
                 if (result != line) result else null
             } ?: throw IllegalStateException("Could not find the current selection for Lored Keyed Cycle")
             if (current == newValue) return
-            MenuUtils.packetClick(slot.id, button = button)
+            MenuUtils.packetClick(slot.index, button = button)
             MenuUtils.onCurrentScreenUpdate()
         }
     }
 
     fun getDyeToggle(slot: Slot): Boolean? {
-        val stack = MenuUtils.currentMenu().screenHandler.getSlot(slot.id).stack
+        val stack = MenuUtils.currentMenu().menu.getSlot(slot.index).item
         return when (stack.item) {
-            Items.LIME_DYE -> true
-            Items.LIGHT_GRAY_DYE, Items.GRAY_DYE, Items.RED_DYE -> false
+            Dyes.LIME -> true
+            Dyes.LIGHT_GRAY, Dyes.GRAY, Dyes.RED -> false
             Items.STONE_BUTTON -> null
-            else -> throw IllegalStateException("Dye Toggle found to be of unexpected type ${stack.item.name.string}")
+            else -> throw IllegalStateException("Dye Toggle found to be of unexpected type ${stack.item.getName(stack).string}")
         }
     }
 
@@ -147,7 +147,7 @@ object InputUtils {
         repeat(10) {
             val current = getDyeToggle(slot)
             if (current == newValue) return
-            if (newValue != null) MenuUtils.packetClick(slot.id) else MenuUtils.packetClick(slot.id, button = 1)
+            if (newValue != null) MenuUtils.packetClick(slot.index) else MenuUtils.packetClick(slot.index, button = 1)
             MenuUtils.onCurrentScreenUpdate()
         }
         throw IllegalStateException("Could not find the correct selection for Dye Toggle")
@@ -160,14 +160,14 @@ object InputUtils {
         when (val screen = MenuUtils.onOpen(null, AnvilScreen::class, ChatScreen::class, null)) {
             is AnvilScreen -> {
                 scaledDelay(4.0)
-                if (screen.screenHandler.setNewItemName(message)) {
-                    MC.networkHandler?.sendPacket(RenameItemC2SPacket(message))
+                if (screen.menu.setItemName(message)) {
+                    MC.connection?.send(ServerboundRenameItemPacket(message))
                 }
                 MenuUtils.interactionClick(2)
             }
 
             null, is ChatScreen -> { //If they have Housing Toolbox and the setting is enabled
-                MC.networkHandler?.sendChatMessage(message)
+                MC.connection?.sendChat(message)
             }
 
             else -> throw IllegalStateException("Expected AnvilScreen or ChatScreen, got ${screen.javaClass.name}")
@@ -203,12 +203,12 @@ object InputUtils {
     internal fun onItemReceived(stack: ItemStack) {
         pendingStack?.let { current ->
             val customName =
-                convertTextToString(stack.customName, false) ?: I18n.translate(stack.item.translationKey)
+                convertTextToString(stack.customName, false) ?: I18n.get(stack.item.descriptionId)
             if (customName.contains("Housing Menu")) return // Housing menu item, not an actual item
             if (pendingItemDisplayName != null) {
                 //Translate text to string
                 val customName =
-                    convertTextToString(stack.customName, false) ?: I18n.translate(stack.item.translationKey)
+                    convertTextToString(stack.customName, false) ?: I18n.get(stack.item.descriptionId)
                 val words = customName.split(" ")
                 for (word in words) {
                     if (!pendingItemDisplayName!!.contains(word)) return

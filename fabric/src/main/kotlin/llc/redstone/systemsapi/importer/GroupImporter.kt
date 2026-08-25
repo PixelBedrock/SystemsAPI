@@ -13,8 +13,8 @@ import llc.redstone.systemsapi.util.MenuUtils
 import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.Items
-import net.minecraft.screen.slot.Slot
+import net.minecraft.world.item.Items
+import net.minecraft.world.inventory.Slot
 
 class GroupImporter(override var name: String) : Group {
     private fun getCurrentMenu(): String? = runCatching { MenuUtils.currentMenu().title.string }.getOrNull()
@@ -56,7 +56,7 @@ class GroupImporter(override var name: String) : Group {
     override suspend fun getTag(): String? {
         openGroupMenu()
         return MenuUtils.findSlots(MenuItems.tag).first()
-            .stack
+            .item
             .getProperty("Current Tag")!!
             .let { if (it == "Not Set") null else it.removeSurrounding("[", "]") }
     }
@@ -66,7 +66,7 @@ class GroupImporter(override var name: String) : Group {
         openGroupMenu()
 
         val current = MenuUtils.findSlots(MenuItems.tag).first()
-            .stack
+            .item
             .getProperty("Current Tag")!!
             .let { if (it == "Not Set") null else it.removeSurrounding("[", "]") }
         if (current == newTag) return this
@@ -110,7 +110,7 @@ class GroupImporter(override var name: String) : Group {
 
         return Group.GroupColor.entries.firstOrNull() {
             it.displayName == MenuUtils.findSlots(MenuItems.color).first()
-                .stack.getProperty("Current Color")
+                .item.getProperty("Current Color")
         } ?: throw IllegalStateException("Failed to get group color")
     }
 
@@ -119,7 +119,7 @@ class GroupImporter(override var name: String) : Group {
 
         val current = Group.GroupColor.entries.firstOrNull() {
             it.displayName == MenuUtils.findSlots(MenuItems.color).first()
-                .stack.getProperty("Current Color")
+                .item.getProperty("Current Color")
         } ?: throw IllegalStateException("Failed to get group color")
         if (current == newColor) return this
 
@@ -134,7 +134,7 @@ class GroupImporter(override var name: String) : Group {
     override suspend fun getPriority(): Int {
         openGroupMenu()
         return MenuUtils.findSlots(MenuItems.priority).first()
-            .stack
+            .item
             .getProperty("Current Priority")
             ?.toInt() ?: throw IllegalStateException("Failed to get group priority")
     }
@@ -143,7 +143,7 @@ class GroupImporter(override var name: String) : Group {
         require(newPriority in 1..20) { "Priority must be in range 1..20" }
 
         val current = MenuUtils.findSlots(MenuItems.priority).first()
-            .stack
+            .item
             .getProperty("Current Priority")
             ?.toInt() ?: throw IllegalStateException("Failed to get group priority")
         if (current == newPriority) return this

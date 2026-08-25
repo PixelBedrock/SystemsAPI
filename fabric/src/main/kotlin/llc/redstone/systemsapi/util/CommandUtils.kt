@@ -6,14 +6,14 @@ import kotlinx.coroutines.withTimeout
 import llc.redstone.systemsapi.SystemsAPI.MC
 import llc.redstone.systemsapi.progress.OpKind
 import llc.redstone.systemsapi.progress.OpRecorder
-import net.minecraft.client.MinecraftClient
-import net.minecraft.network.packet.c2s.play.RequestCommandCompletionsC2SPacket
+import net.minecraft.client.Minecraft
+import net.minecraft.network.protocol.game.ServerboundCommandSuggestionPacket
 
 object CommandUtils {
     fun runCommand(command: String) {
-        MinecraftClient.getInstance().player
-            ?.networkHandler
-            ?.sendChatCommand(command) ?: throw IllegalStateException("Unable to send command $command")
+        Minecraft.getInstance().player
+            ?.connection
+            ?.sendCommand(command) ?: throw IllegalStateException("Unable to send command $command")
 
     }
 
@@ -30,7 +30,7 @@ object CommandUtils {
             pending = deferred
 
             try {
-                MC.networkHandler?.sendPacket(RequestCommandCompletionsC2SPacket(1, partialCommand))
+                MC.connection?.send(ServerboundCommandSuggestionPacket(1, partialCommand))
                 withTimeout(1_000) { deferred.await() }
             } finally {
                 if (pending === deferred) pending = null

@@ -18,7 +18,7 @@ import llc.redstone.systemsapi.util.TextUtils
 import llc.redstone.systemsdata.Condition
 import llc.redstone.systemsdata.DisplayName
 import llc.redstone.systemsdata.VariableHolder
-import net.minecraft.item.Items
+import net.minecraft.world.item.Items
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.findAnnotations
@@ -140,15 +140,15 @@ object ConditionContainer {
 
         for (slotIndex in slots.values) {
             val slot = MenuUtils.getSlot(slotIndex)
-            if (!slot.hasStack()) break //No more actions
+            if (!slot.hasItem()) break //No more actions
 
-            val item = slot.stack
+            val item = slot.item
             val loreLines = item.loreLines(true).filter {
                 it.contains(": ") //Only care about lines with properties
             }
 
 
-            val name = TextUtils.convertTextToString(item.name, false)
+            val name = TextUtils.convertTextToString(item.hoverName, false)
             var conditionClass = Condition::class.sealedSubclasses.firstOrNull { it.findAnnotations(DisplayName::class).any { ann -> ann.value == name } }
                 ?: continue
 
@@ -215,7 +215,7 @@ object ConditionContainer {
 
             if (conditionInstance == null) continue
 
-            if (slot.stack.getLoreLineMatchesOrNull(false) {it == "Inverted"} != null) {
+            if (slot.item.getLoreLineMatchesOrNull(false) {it == "Inverted"} != null) {
                 conditionInstance.inverted = true
             }
 

@@ -12,8 +12,8 @@ import llc.redstone.systemsapi.util.PredicateUtils.ItemMatch.ItemExact
 import llc.redstone.systemsapi.util.PredicateUtils.ItemSelector
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameContains
 import llc.redstone.systemsapi.util.PredicateUtils.NameMatch.NameExact
-import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 
 class LayoutImporter(override var name: String) : Layout {
     private suspend fun openLayoutMenu() {
@@ -42,7 +42,7 @@ class LayoutImporter(override var name: String) : Layout {
         openArmorSelection(label)
 
         // TODO: look and see if the item name can also be found
-        val stack = MenuUtils.findSlots(MenuItems.currentItem).first().stack
+        val stack = MenuUtils.findSlots(MenuItems.currentItem).first().item
         return InputUtils.getItemFromMenu(null, stack) {
             MenuUtils.clickItems(MenuItems.currentItem)
         }
@@ -53,7 +53,7 @@ class LayoutImporter(override var name: String) : Layout {
         openLayoutMenu()
         openArmorSelection(label)
 
-        val oldStack = player.inventory.getStack(26)
+        val oldStack = player.inventory.getItem(26)
         newStack.giveItem(26)
         MenuUtils.clickPlayerSlot(26)
         MenuUtils.onOpen("Change Armor")
@@ -64,16 +64,16 @@ class LayoutImporter(override var name: String) : Layout {
     }
 
     private fun getStacks(range: IntRange): Array<ItemStack> =
-        range.map { MenuUtils.currentMenu().screenHandler.inventory.getStack(it) }.toTypedArray()
+        range.map { MenuUtils.currentMenu().menu.container.getItem(it) }.toTypedArray()
 
     private suspend fun setStacks(range: IntRange, stacks: Array<ItemStack>) {
-        val oldStack = MC.player?.inventory?.getStack(26) ?: throw IllegalStateException("Could not get old itemstack")
+        val oldStack = MC.player?.inventory?.getItem(26) ?: throw IllegalStateException("Could not get old itemstack")
 
-        Items.AIR.defaultStack.giveItem(26)
-        val oldStacks = MenuUtils.currentMenu().screenHandler.slots.filter { it.id in range }
+        Items.AIR.defaultInstance.giveItem(26)
+        val oldStacks = MenuUtils.currentMenu().menu.slots.filter { it.index in range }
         for ((index, oldStack) in oldStacks.withIndex()) {
-            if (oldStack.hasStack()) {
-                MenuUtils.interactionClick(oldStack.id)
+            if (oldStack.hasItem()) {
+                MenuUtils.interactionClick(oldStack.index)
                 scaledDelay(4.0)
                 MenuUtils.interactionClick(71)
                 scaledDelay(2.0)
@@ -86,7 +86,7 @@ class LayoutImporter(override var name: String) : Layout {
                 MenuUtils.interactionClick(71)
                 scaledDelay(2.0)
                 MenuUtils.interactionClick(range.first + index)
-            } else Items.AIR.defaultStack.giveItem(26)
+            } else Items.AIR.defaultInstance.giveItem(26)
         }
         oldStack.giveItem(26)
     }

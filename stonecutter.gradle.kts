@@ -11,5 +11,5 @@ stonecutter parameters {
     swaps["mod_version"] = "\"" + node.branch.project.findProperty("mod.version") + "\";"
     swaps["minecraft"] = "\"" + node.metadata.version + "\";"
     constants["release"] = node.branch.project.findProperty("mod.id") != "systemsapi"
-    dependencies["fapi"] = node.project.findProperty("deps.fabric_api") as String
+    dependencies["fapi"] = node.project.property("deps.fabric_api") as String
 }

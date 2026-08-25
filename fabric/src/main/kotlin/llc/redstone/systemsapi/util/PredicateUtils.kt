@@ -1,7 +1,7 @@
 package llc.redstone.systemsapi.util
 
-import net.minecraft.item.Item
-import net.minecraft.item.ItemStack
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
 
 object PredicateUtils {
     data class ItemSelector(
@@ -15,7 +15,7 @@ object PredicateUtils {
         )
 
         fun toPredicate(): (ItemStack) -> Boolean = { stack ->
-            val nameOk = name?.matches(stack.name.string) ?: true
+            val nameOk = name?.matches(stack.hoverName.string) ?: true
             val itemOk = item?.matches(stack.item) ?: true
             val extraOk = extra?.invoke(stack) ?: true
 

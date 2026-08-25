@@ -4,25 +4,25 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import llc.redstone.systemsapi.SystemsAPI.CONFIG
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 
 object ChatUtils {
 
     private data class Listener(
-        val predicate: (Text) -> Boolean,
-        val deferred: CompletableDeferred<Text>,
+        val predicate: (Component) -> Boolean,
+        val deferred: CompletableDeferred<Component>,
         val cancel: Boolean
     )
     private val listeners = mutableListOf<Listener>()
 
     suspend fun onRecieve(
-        predicate: (Text) -> Boolean,
+        predicate: (Component) -> Boolean,
         cancel: Boolean = false,
-    ): Text {
+    ): Component {
         return try {
             withTimeout(CONFIG.menuTimeout) {
-                val deferred = CompletableDeferred<Text>()
+                val deferred = CompletableDeferred<Component>()
                 val listener = Listener(predicate, deferred, cancel)
                 synchronized(listeners) {
                     listeners += listener
@@ -43,7 +43,7 @@ object ChatUtils {
     suspend fun onRecieve(
         message: String,
         cancel: Boolean = false,
-    ): Text {
+    ): Component {
         return onRecieve(
             { it.string == message },
             cancel
@@ -51,7 +51,7 @@ object ChatUtils {
     }
 
     @JvmStatic
-    fun dispatchIncomingChat(text: Text, ci: CallbackInfo) {
+    fun dispatchIncomingChat(text: Component, ci: CallbackInfo) {
         val toComplete = synchronized(listeners) {
             listeners.filter { it.predicate(text) }
         }

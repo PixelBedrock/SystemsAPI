@@ -1,7 +1,7 @@
 package llc.redstone.systemsapi.api
 
 import llc.redstone.systemsapi.importer.ActionContainer
-import net.minecraft.item.ItemStack
+import net.minecraft.world.item.ItemStack
 
 /**
  * Represents a custom menu in Housing.
