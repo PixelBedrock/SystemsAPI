@@ -58,7 +58,9 @@ class ActionContainer(
         )
     }
 
-    suspend fun getActions(): List<Action> = ProgressTracker.runRootIfIdle(
+    suspend fun getActions() = getActions(true)
+
+    suspend fun getActions(exportItems: Boolean): List<Action> = ProgressTracker.runRootIfIdle(
         ProgressPhase.EXPORTING,
         planned = null,
         label = "Read $title",
@@ -98,7 +100,7 @@ class ActionContainer(
         // one -- the total is already known from discovery, so this pass is purely reading.
         val actions = mutableListOf<Action>()
         while (true) {
-            actions.addAll(readCurrentPage())
+            actions.addAll(readCurrentPage(exportItems))
             if (MenuUtils.findSlots(MenuUtils.GlobalMenuItems.NEXT_PAGE).firstOrNull() == null) break
             MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
             MenuUtils.onOpen(" $title", checkIfOpen = false)
@@ -109,19 +111,19 @@ class ActionContainer(
 
     private fun currentPageSlots(): List<Slot> = slots.values.map { MenuUtils.getSlot(it) }
 
-    private suspend fun readCurrentPage(): List<Action> {
+    private suspend fun readCurrentPage(exportItems: Boolean): List<Action> {
         val actions = mutableListOf<Action>()
         for (slotIndex in slots.values) {
             val slot = MenuUtils.getSlot(slotIndex)
             if (!slot.hasItem()) break
 
-            parseAction(slot)?.let { actions.add(it) }
+            parseAction(slot, exportItems)?.let { actions.add(it) }
         }
         MenuUtils.onOpen(title)
         return actions
     }
 
-    private suspend fun parseAction(slot: Slot): Action? {
+    private suspend fun parseAction(slot: Slot, exportItems: Boolean): Action? {
         val item = slot.item
         val loreLines = item.loreLines(true).filter { it.contains(":") }
         val allLines = item.loreLines(true)
@@ -131,7 +133,7 @@ class ActionContainer(
             it.findAnnotations(ActionDefinition::class).any { ann -> ann.displayName == name }
         } ?: return null
 
-        return buildAction(actionClass, loreLines, allLines, slot, 0)
+        return buildAction(actionClass, loreLines, allLines, slot, 0, exportItems)
     }
 
     private suspend fun buildAction(
@@ -139,7 +141,8 @@ class ActionContainer(
         loreLines: List<String>,
         allLines: List<String>,
         slot: Slot,
-        indexOffset: Int
+        indexOffset: Int,
+        exportItems: Boolean
     ): Action? {
         val constructor = actionClass.primaryConstructor ?: return null
         val properties = constructor.parameters.mapNotNull { param ->
@@ -167,7 +170,7 @@ class ActionContainer(
             }
 
             val returnValue =
-                PropertySettings.export(title, prop, slot, slots[index + indexOffset]!!, value, colorValue)
+                PropertySettings.export(title, prop, slot, slots[index + indexOffset]!!, value, colorValue, exportItems)
 
             // Handle VariableHolder by switching to the appropriate subclass
             if (returnValue is VariableHolder) {
@@ -176,7 +179,7 @@ class ActionContainer(
                     VariableHolder.Global -> Action.GlobalVariable::class
                     VariableHolder.Team -> Action.TeamVariable::class
                 }
-                return buildAction(newClass, loreLines, allLines, slot, 1)
+                return buildAction(newClass, loreLines, allLines, slot, 1, exportItems)
             }
 
             args[param] = returnValue

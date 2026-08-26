@@ -1,13 +1,7 @@
 package llc.redstone.systemsapi.importer
 
 import llc.redstone.systemsapi.api.ProgressPhase
-import llc.redstone.systemsapi.progress.CostModel
-import llc.redstone.systemsapi.progress.ExportPlanner
-import llc.redstone.systemsapi.progress.ImportPlanner
-import llc.redstone.systemsapi.progress.OpRecorder
-import llc.redstone.systemsapi.progress.PlanCost
-import llc.redstone.systemsapi.progress.ProgressTracker
-import llc.redstone.systemsapi.progress.PropertyReflection
+import llc.redstone.systemsapi.progress.*
 import llc.redstone.systemsapi.util.ItemStackUtils.getLoreLineMatchesOrNull
 import llc.redstone.systemsapi.util.ItemStackUtils.loreLines
 import llc.redstone.systemsapi.util.MenuUtils
@@ -125,7 +119,7 @@ object ConditionContainer {
         }
     }
 
-    suspend fun exportConditions(): List<Condition> {
+    suspend fun exportConditions(exportItems: Boolean): List<Condition> {
         val conditions = mutableListOf<Condition>()
 
         MenuUtils.onOpen("Edit Conditions")
@@ -161,7 +155,7 @@ object ConditionContainer {
                 properties.add(conditionProperties.find { it.name == parm.name } as KProperty1<Condition, *> to parm)
             }
 
-            suspend fun args(indexAddition: Int = 1): MutableMap<KParameter, Any?> {
+            suspend fun args(indexAddition: Int, exportItems: Boolean): MutableMap<KParameter, Any?> {
                 val args = mutableMapOf<KParameter, Any?>()
                 properties.forEachIndexed { index, (prop, param) ->
                     if (param == null) return@forEachIndexed
@@ -176,7 +170,8 @@ object ConditionContainer {
                         slot,
                         slots[index + indexAddition]!!,
                         value,
-                        colorValue
+                        colorValue,
+                        exportItems
                     )
 
                     if (returnValue is VariableHolder) {
@@ -193,14 +188,14 @@ object ConditionContainer {
                             properties.add(conditionProperties.find { it.name == parm.name } as KProperty1<Condition, *> to parm)
                         }
                         // I hate recursion, but I think this is the cleanest way to handle it
-                        return args(2)
+                        return args(2, exportItems)
                     }
 
                     args[param] = returnValue
                 }
                 return args
             }
-            val args = args()
+            val args = args(1, exportItems)
 
             var conditionInstance: Condition? = null
             if (args.size != constructor.parameters.size) {
@@ -225,7 +220,7 @@ object ConditionContainer {
         if (MenuUtils.findSlots(MenuUtils.GlobalMenuItems.NEXT_PAGE).firstOrNull() != null) {
             MenuUtils.clickItems(MenuUtils.GlobalMenuItems.NEXT_PAGE)
             MenuUtils.onOpen("Edit Conditions", checkIfOpen = false)
-            conditions.addAll(exportConditions())
+            conditions.addAll(exportConditions(exportItems))
         } else {
             ExportPlanner.finishDiscovery()
         }

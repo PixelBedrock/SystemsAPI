@@ -227,7 +227,7 @@ object PropertySettings {
 
     private val genericContainer = ActionContainer("Edit Actions")
 
-    suspend fun export(title: String, prop: KProperty1<out PropertyHolder, *>, actionSlot: Slot, propertySlotIndex: Int, value: String, colorValue: String): Any? {
+    suspend fun export(title: String, prop: KProperty1<out PropertyHolder, *>, actionSlot: Slot, propertySlotIndex: Int, value: String, colorValue: String, exportItems: Boolean): Any? {
         var colorValue = colorValue
         var value = value
 
@@ -306,7 +306,7 @@ object PropertySettings {
                     MenuUtils.packetClick(propertySlotIndex)
                     ExportPlanner.beginNestedDescent()
                     returnValue = try {
-                        ConditionContainer.exportConditions()
+                        ConditionContainer.exportConditions(exportItems)
                     } finally {
                         ExportPlanner.endNestedDescent()
                     }
@@ -324,6 +324,9 @@ object PropertySettings {
             }
 
             ItemStack::class -> {
+                if (!exportItems) {
+                    return null
+                }
                 MenuUtils.packetClick(actionSlot.index)
                 MenuUtils.onOpen("Settings")
 
